@@ -385,7 +385,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - Tests: `test/jobs.test.ts`, argv cases, and smoke cases for success, exit 3, exit 4, the trust gates, cancel, the timeout, and cloud flags
   - _Requirements: 11.4, 22.1, 22.2, 22.3, 22.4, 22.5, 22.6, 22.7, 22.8_
 
-- [ ] 14. Config tools
+- [x] 14. Config tools
   - `src/tools/config.ts`:
     - `kiro_agents`: `list` from ACP modes and config errors, `validate`, and the gated `create`, `set_default`, and `upgrade`;
     - `kiro_mcp_config`: `list` and `status` with text parsing in `src/parse.ts`, and the gated `add` (HTTP URL only; a command server gives `STDIO_SERVER_WITHHELD`) and `remove`;

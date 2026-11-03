@@ -43,3 +43,25 @@ describe("parseTasks", () => {
     assert.equal(unchecked, 2);
   });
 });
+
+describe("text parsers", () => {
+  it("parses mcp list text with ANSI codes, scopes, and disabled markers", async () => {
+    const { parseMcpList } = await import("../src/parse.js");
+    const text =
+      "\u001b[1m📄 Global:\u001b[0m /home/dev/.kiro/settings/mcp.json\n  • docs         https://docs.example.dev/mcp\n  • fetch        uvx mcp-server-fetch\n\n" +
+      "\u001b[1m📄 Workspace:\u001b[0m /work/.kiro/settings/mcp.json\n  • local-tools  http://localhost:7000/mcp (disabled)\n";
+    assert.deepEqual(parseMcpList(text), [
+      { name: "docs", target: "https://docs.example.dev/mcp", scope: "global", disabled: false },
+      { name: "fetch", target: "uvx mcp-server-fetch", scope: "global", disabled: false },
+      { name: "local-tools", target: "http://localhost:7000/mcp", scope: "workspace", disabled: true },
+    ]);
+  });
+
+  it("parses key-value status text and settings JSON in both shapes", async () => {
+    const { parseKeyValues, parseSettings } = await import("../src/parse.js");
+    assert.deepEqual(parseKeyValues("\u001b[1mdocs\u001b[0m\nScope: global\nURL: https://x\n"), { scope: "global", url: "https://x" });
+    assert.deepEqual(parseSettings('{"a":1}'), { a: 1 });
+    assert.deepEqual(parseSettings('[{"key":"b","value":true}]'), { b: true });
+    assert.throws(() => parseSettings("nope"));
+  });
+});

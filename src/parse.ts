@@ -65,3 +65,56 @@ export function parseProfile(stdout: string): string | null {
 export function parseJson(stdout: string): unknown {
   return JSON.parse(stdout.trim());
 }
+
+export interface McpListEntry {
+  name: string;
+  target: string | null;
+  scope: string | null;
+  disabled: boolean;
+}
+
+/** `kiro-cli mcp list` prints text: scope headings, then `• name  command-or-url` lines. */
+export function parseMcpList(stdout: string): McpListEntry[] {
+  const servers: McpListEntry[] = [];
+  let scope: string | null = null;
+  for (const raw of cleanTerminalText(stdout).split("\n")) {
+    const line = raw.trim();
+    const heading = /^(?:📄\s*)?([A-Za-z][A-Za-z ]*?)\s*:\s*(\S.*)?$/u.exec(line);
+    if (heading !== null && !/^[•*-]/.test(line)) {
+      scope = (heading[1] ?? "").toLowerCase();
+      continue;
+    }
+    const item = /^[•*-]\s+(\S+)(?:\s+(.*?))?\s*$/u.exec(line);
+    if (item === null) continue;
+    let target = item[2] ?? null;
+    const disabled = target !== null && /\(disabled\)\s*$/i.test(target);
+    if (target !== null) target = target.replace(/\s*\(disabled\)\s*$/i, "").trim() || null;
+    servers.push({ name: item[1] ?? "", target, scope, disabled });
+  }
+  return servers;
+}
+
+/** `Key: value` lines from text output such as `kiro-cli mcp status`. */
+export function parseKeyValues(stdout: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const line of cleanTerminalText(stdout).split("\n")) {
+    const m = /^\s*([A-Za-z][A-Za-z /_-]{0,40}?)\s*:\s*(.+?)\s*$/.exec(line);
+    if (m !== null) out[(m[1] ?? "").toLowerCase().replace(/[ /-]+/g, "_")] = m[2] ?? "";
+  }
+  return out;
+}
+
+/** `kiro-cli settings list --format json`: an object of key to value, or an array of `{ key, value }`. */
+export function parseSettings(stdout: string): Record<string, unknown> {
+  const parsed = JSON.parse(stdout.trim()) as unknown;
+  if (Array.isArray(parsed)) {
+    const out: Record<string, unknown> = {};
+    for (const entry of parsed) {
+      const e = (entry ?? {}) as Record<string, unknown>;
+      if (typeof e.key === "string") out[e.key] = e.value;
+    }
+    return out;
+  }
+  if (typeof parsed === "object" && parsed !== null) return parsed as Record<string, unknown>;
+  throw new Error("settings output is not an object");
+}
