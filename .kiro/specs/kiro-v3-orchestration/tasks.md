@@ -289,7 +289,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - _Requirements: 10.10, 16.1, 16.2_
 
 - [ ] 7. Turns
-- [ ] 7.1 Prompt content blocks
+- [x] 7.1 Prompt content blocks
   - `src/prompt.ts` `buildPromptBlocks()`:
     - text;
     - files as `resource_link`, or embedded UTF-8 text under the embed cap;
