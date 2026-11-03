@@ -156,3 +156,21 @@ describe("shutdown", () => {
     assert.ok(c.meta().some((m) => m.kind === "notification" && m.method === "session/cancel"), "running turn cancelled");
   });
 });
+
+describe("package", () => {
+  it("packs the bin entry, README, and LICENSE, and nothing from test/", async () => {
+    const { execFileSync } = await import("node:child_process");
+    const { readFileSync, existsSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const { repoRoot } = await import("./helpers.js");
+    const pkg = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8")) as { bin: Record<string, string>; files: string[]; name: string };
+    assert.equal(pkg.name, "@sohampatwardhan/kiro-mcp-server");
+    assert.equal(pkg.bin["kiro-mcp-server"], "dist/src/index.js");
+    assert.ok(existsSync(join(repoRoot, pkg.bin["kiro-mcp-server"] ?? "")));
+    const out = execFileSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], { cwd: repoRoot, encoding: "utf8" });
+    const files = (JSON.parse(out) as { files: { path: string }[] }[])[0]?.files.map((f) => f.path) ?? [];
+    for (const needed of ["dist/src/index.js", "dist/src/server.js", "README.md", "LICENSE", "package.json"]) assert.ok(files.includes(needed), needed);
+    assert.ok(!files.some((f) => f.startsWith("dist/test/") || f.startsWith("test/")));
+    assert.ok(readFileSync(join(repoRoot, "dist/src/index.js"), "utf8").startsWith("#!/usr/bin/env node"));
+  });
+});

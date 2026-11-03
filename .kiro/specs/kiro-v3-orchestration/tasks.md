@@ -408,7 +408,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
     - shutdown stops the fake host and a running headless child (checked with the meta-log pids).
   - _Requirements: 1.1, 14.5, 20.6, 24.3, 24.6, 24.7, 25.5_
 
-- [ ] 16. Release workflow, package metadata, and agent guide
+- [x] 16. Release workflow, package metadata, and agent guide
   - `.github/workflows/release.yml` copied from the sibling:
     - `v*.*.*` tag or `workflow_dispatch`;
     - the tag must match the `package.json` version;
