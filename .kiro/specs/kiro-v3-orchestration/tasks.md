@@ -1,10 +1,10 @@
 # Implementation Plan
 
-This plan builds `kiro-mcp-server` from an empty repository to a publishable package: an ACP v3 host, 31 typed tools, headless jobs, and the fake-CLI test suite. Each task ends with `npm run build` and `npm test` passing.
+This plan builds `kiro-mcp-server` from an empty repository to a publishable package: an ACP v3 host, 32 typed tools and a subscribable transcript resource, headless jobs, bundled agent skills, and the fake-CLI test suite. Each task ends with `npm run build` and `npm test` passing.
 
 ## Task graph
 
-An arrow means depends-on. Primary critical path: 1, 2.1, 4.1, 4.2, 6.1, 7.1, 7.2, 8, 15, 16.
+An arrow means depends-on. Primary critical path: 1, 2.1, 4.1, 4.2, 6.1, 7.1, 7.2, 8, 15, 16, 19.
 
 ```mermaid
 ---
@@ -51,12 +51,14 @@ flowchart TB
       t12["12. Kiro extensions"]
       t13["13. Headless jobs"]
       t14["14. Config tools"]
+      t18["18. Live transcript streaming"]
     end
   end
   subgraph phase7 [Phase 7 Integration]
     t15["15. Shutdown, instructions, full smoke suite"]
     t16["16. Release workflow, package metadata, agent guide"]
     t17["17. Live probe against a real kiro-cli (optional)"]
+    t19["19. Bundled agent skills and CI install job"]
   end
   subgraph legend [Legend]
     legCrit["Critical path"]
@@ -105,13 +107,18 @@ flowchart TB
   t12 --> t15
   t13 --> t15
   t14 --> t15
+  t62 --> t18
+  t72 --> t18
+  t18 --> t15
+  t15 --> t19
+  t16 --> t19
   t15 --> t16
   t15 --> t17
   classDef critical fill:#fde68a,stroke:#b45309,color:#1c1917
   classDef parallel fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
   classDef blocked fill:#fecaca,stroke:#b91c1c,color:#7f1d1d
-  class t1,t21,t41,t42,t61,t71,t72,t8,t15,t16 critical
-  class t22,t23,t3,t5,t62,t63,t64,t65,t73,t9,t10,t11,t12,t13,t14 parallel
+  class t1,t21,t41,t42,t61,t71,t72,t8,t15,t16,t19 critical
+  class t22,t23,t3,t5,t62,t63,t64,t65,t73,t9,t10,t11,t12,t13,t14,t18 parallel
   class t17 blocked
   class legCrit critical
   class legPar parallel
@@ -129,11 +136,12 @@ Waves, computed from the arrows:
 | 5 | 6.1, 9 |
 | 6 | 6.2, 6.3, 6.4, 6.5, 7.1 |
 | 7 | 7.2, 14 |
-| 8 | 7.3, 8, 10, 12 |
+| 8 | 7.3, 8, 10, 12, 18 |
 | 9 | 15 |
 | 10 | 16, 17 (optional) |
+| 11 | 19 |
 
-Two chains tie for longest: through 8 and through 10. The critical path shown goes through 8 because the permission flow is the core state change for orchestration.
+Three chains tie for longest: through 8, through 10, and through 18. The critical path shown goes through 8 because the permission flow is the core state change for orchestration.
 
 ## Tasks
 
@@ -255,7 +263,7 @@ Two chains tie for longest: through 8 and through 10. The critical path shown go
   - _Requirements: 4.5, 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 21.4, 21.5_
 
 - [ ] 6.3 Close, delete, export, and rename
-  - `kiro_session_close`: cancel, reject pending permissions, `session/close`, and return the final cursor. `kiro_session_delete`: requires `confirm: true` and a root check for local sessions. `kiro_session_export`: destination inside a root, `PATH_EXISTS` unless `overwrite`. `title` on `kiro_session_configure` calls `_kiro/session/rename`
+  - `kiro_session_close`: cancel, reject pending permissions, `session/close`, and return the final cursor. The closed session's feed stays read-only for the job TTL (up to 50 closed sessions) for streams to drain. `kiro_session_delete`: requires `confirm: true` and a root check for local sessions. `kiro_session_export`: destination inside a root, `PATH_EXISTS` unless `overwrite`. `title` on `kiro_session_configure` calls `_kiro/session/rename`
   - Tests: smoke cases for each tool, including `CONFIRMATION_REQUIRED` and `PATH_EXISTS`
   - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7_
 
@@ -313,19 +321,21 @@ Two chains tie for longest: through 8 and through 10. The critical path shown go
     - applies `KIRO_MCP_PERMISSIONS` (`ask`, `deny`, `allow`), the shell gate (`KIRO_MCP_ALLOW_SHELL`, consent capability `shell` or tool kind `execute`), and the timeout auto-reject;
     - never synthesizes an option;
     - `allow_always` needs `KIRO_MCP_ALLOW_PERSISTENT_CONSENT`, with an optional `scope` and resource sent as `_meta.kiro.consent`;
-    - a denial stays distinct from a cancellation.
+    - a denial stays distinct from a cancellation;
+    - `elicit()`: when the client declared elicitation (`getClientCapabilities()`), a pending `ask` request is also sent with `server.server.elicitInput` as a form with one enum field of the acceptable option ids. `accept` answers with that option, `decline` with `reject_once`, and `cancel` or an error leaves it pending.
   - `src/tools/permissions.ts`: `kiro_permissions` and `kiro_permission_respond` (`OPTION_NOT_OFFERED`, `PERMISSION_NOT_FOUND`, `PERSISTENT_CONSENT_DISABLED`, `SHELL_APPROVAL_DISABLED`)
-  - Tests: `test/permissions.test.ts` (the policy matrix, with an injected clock for the timeout) and smoke cases for respond allow, respond reject, the shell gate, and the timeout
-  - _Requirements: 12.1, 12.2, 12.3, 12.4, 12.5, 12.6, 12.7, 12.8, 12.9, 12.10_
+  - Tests: `test/permissions.test.ts` (the policy matrix, with an injected clock for the timeout) and smoke cases for respond allow, respond reject, the shell gate, the timeout, and elicitation accept, decline, and cancel through a client that declares the capability
+  - _Requirements: 12.1, 12.2, 12.3, 12.4, 12.5, 12.6, 12.7, 12.8, 12.9, 12.10, 12.11_
 
 - [ ] 9. Status and usage
   - `src/tools/status.ts`:
     - `kiro_status` returns the CLI path and version, the engine V3 init result, capabilities, roots, policy, log paths, and dropped-line count, plus `whoami --format json` and `profile` (only `accountType`, `email`, and the profile name). When signed out it returns the sign-in instruction. `include_diagnostics` adds `diagnostic --format json` and `doctor --all`;
     - `kiro_usage` calls `_kiro/account/getUsage` and adds per-session credit totals. `UNSUPPORTED_BY_KIRO` still returns the session totals.
   - Shared sign-in error mapping, so any tool reports `CLI_NOT_SIGNED_IN`
+  - `src/trust.ts` `workspaceTrust()` (design Decision 9): `kiro_status` reports `trusted` per root and a warning with the `kiro-cli --v3` instruction for each untrusted root. Read-only
   - `src/parse.ts`: whoami and profile parsing
-  - Tests: `test/parse.test.ts` and smoke cases for signed in, signed out, diagnostics, usage, and unsupported usage
-  - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 3.1, 3.3, 3.4_
+  - Tests: `test/parse.test.ts`, `test/trust.test.ts`, and smoke cases for signed in, signed out, diagnostics, usage, unsupported usage, and an untrusted root (fake `HOME`)
+  - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 3.1, 3.3, 3.4_
 
 - [ ] 10. Tangent
   - `src/tangent.ts` `TangentTree` and `src/tools/branching.ts` `kiro_tangent`:
@@ -389,7 +399,7 @@ Two chains tie for longest: through 8 and through 10. The critical path shown go
   - `src/index.ts`: on stdin close, SIGINT, SIGTERM, or SIGHUP, cancel running turns, close the host's stdin, run `stopAll`, and exit
   - `SERVER_INSTRUCTIONS` in `src/server.ts` with the content listed in the design. That includes composing `/spec run`, `/goal`, `/clear`, and `/spawn`, and the impossible features with their reasons
   - Assert in `test/smoke.test.ts` that:
-    - the tool list exactly matches the 31-tool table;
+    - the tool list exactly matches the 32-tool table;
     - every tool has an `outputSchema`;
     - unknown properties are rejected;
     - no tool or field forwards free-form flags or raw ACP methods;
@@ -406,7 +416,7 @@ Two chains tie for longest: through 8 and through 10. The critical path shown go
     - `npm publish --provenance --access public` through trusted publishing (OIDC, no `NPM_TOKEN`);
     - `gh release create`;
     - the GitHub Packages mirror job.
-  - `AGENTS.md` (the agent guide: tool table, architecture, safety rules, test layout) and `CLAUDE.md` (`@AGENTS.md`). Also `README.md` with install through `npx -y @sohampatwardhan/kiro-mcp-server@latest`, client config examples, the tool and environment tables, the error table, and a credit to `vanphappi/kiro-cli-mcp` as inspiration. `.mcp.json` registers Context7 for library docs, as in the sibling
+  - `AGENTS.md` (the agent guide: tool table, architecture, safety rules, test layout) and `CLAUDE.md` (`@AGENTS.md`). Also `README.md` with install through `npx -y @sohampatwardhan/kiro-mcp-server@latest`, client config examples, the tool and environment tables, the error table, and a credit to `vanphappi/kiro-cli-mcp` as inspiration. The README also says to trust each root once in `kiro-cli --v3` and documents the `KIRO_MCP_ALLOW_SHELL` opt-in (design Decisions 9 and 14). `.mcp.json` registers Context7 for library docs, as in the sibling
   - Tests: a `test/smoke.test.ts` case that the packed `package.json` bin path and `files` list resolve (`npm pack --dry-run --json`)
   - _Requirements: 1.5_
 
@@ -417,3 +427,20 @@ Two chains tie for longest: through 8 and through 10. The critical path shown go
     - compares the shapes with the fake fixture;
     - deletes the sessions it created.
   - _Requirements: 1.6_
+
+- [ ] 18. Live transcript streaming
+  - `src/transcript.ts`: `readStream()` over a session feed with the `types` filter (the cursor still advances past skipped events), `max_chars` truncation that resumes at the first event left out, `gap` when the cursor is below `lowestCursor`, and thought omission. `TranscriptNotifier` keeps subscribed URIs and coalesces `notifications/resources/updated` per URI on a 250 ms timer
+  - `src/tools/stream.ts`:
+    - `kiro_stream_session` with the short default `wait_s`, auto-attach through the same path as `kiro_session_load` when the session is not attached, and `session_state` (`attached` or `closed`) plus the turn status;
+    - the `kiro-session://{session_id}/transcript` resource template, with list, read capped at the resource cap, and auto-attach;
+    - `SubscribeRequestSchema` and `UnsubscribeRequestSchema` handlers on the low-level server, and a feed append hook that calls `TranscriptNotifier.touched()`.
+  - Tests: `test/transcript.test.ts` and smoke cases for streaming a session loaded from the store (replay first), idempotent cursor reads, a cancelled turn, a closed session, the resource read, and a subscribed client receiving `notifications/resources/updated` within 1 s
+  - _Requirements: 26.1, 26.2, 26.3, 26.4, 26.5, 26.6, 26.7_
+
+- [ ] 19. Bundled agent skills and CI install job
+  - `skills/kiro-orchestration/SKILL.md` with `name`, `description`, and `metadata` (`author: Soham Patwardhan`, `version: "1.0.0"`), plus `references/` for the tool cheat sheet and recovery playbook. Covers delegating a task, choosing mode, model, effort, and permissions (including the `KIRO_MCP_ALLOW_SHELL` opt-in), following a run with `kiro_stream_session` or the transcript resource, collecting results and patches, and recovery
+  - `scripts/check-skill-versions.mjs` copied from `KaTeX-Agent-Skill`
+  - Extend `.github/workflows/ci.yml` with a `skills` job: the version check, then `npx -y skills add "$GITHUB_WORKSPACE" -g -y -a claude-code -a codex --json` with a throwaway `HOME` and `CI=true`, a `jq` check that every entry is `installed`, and a loop that checks each `skills/*/SKILL.md` exists under `$HOME/.agents/skills/`
+  - README **Install the skills** section with `npx skills add sohampatwardhan/kiro-mcp-server -g`, a `--skill kiro-orchestration` example, and an `-a <agent>` example
+  - Tests: the CI job itself, run locally once with the same commands before pushing
+  - _Requirements: 27.1, 27.2, 27.3, 27.4, 27.5_
