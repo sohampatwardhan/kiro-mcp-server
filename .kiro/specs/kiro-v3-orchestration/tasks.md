@@ -151,7 +151,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - Tests run only against `test/fixtures/fake-kiro.mjs`. The workflow installs no `kiro-cli` and sets no secrets
   - Gates every later task: it must pass before task 2.1 starts
 
-- [ ] 2. Foundation
+- [x] 2. Foundation
 - [x] 2.1 Package scaffold, config, and error model
   - Add the following:
     - `package.json`: name `@sohampatwardhan/kiro-mcp-server`, bin `kiro-mcp-server` pointing to `dist/src/index.js` (no leading `./`), `type: module`, `engines.node >=20`, `files`, `publishConfig.access public`, and the `build`, `prepack`, `start`, and `test` scripts;
@@ -171,7 +171,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - Tests: `test/paths.test.ts`, covering symlinks into and out of a root, a sibling that shares a name prefix, a missing path, and `/tmp` vs `/private/tmp` on macOS
   - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
 
-- [ ] 2.3 Child registry, CLI runner, and prerequisites
+- [x] 2.3 Child registry, CLI runner, and prerequisites
   - `src/children.ts`, ported from the sibling's design: `detached: true` spawns, a `track()` registry, `killGroup` (SIGTERM, then SIGKILL 5 s later), `Scope` cancel through `AsyncLocalStorage`, and `stopAll`
   - `src/cli.ts` `runCli(argv, opts)`:
     - `spawn` with `shell: false` and stdin closed, or stdin data when given;
