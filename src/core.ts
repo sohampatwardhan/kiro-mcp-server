@@ -9,6 +9,8 @@ export interface Core {
   roots: Roots;
   host: AcpHost;
   sessions: SessionRegistry;
+  /** Pending permissions for a session, as tool output. Replaced by the permission broker. */
+  pendingPermissions: (sessionId?: string) => Record<string, unknown>[];
 }
 
 export function createCore(config: Config, version: string): Core {
@@ -20,5 +22,5 @@ export function createCore(config: Config, version: string): Core {
     clientVersion: version,
   });
   const sessions = new SessionRegistry(host, roots);
-  return { config, roots, host, sessions };
+  return { config, roots, host, sessions, pendingPermissions: () => [] };
 }

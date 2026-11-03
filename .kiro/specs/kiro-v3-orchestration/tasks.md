@@ -250,7 +250,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - Tests: smoke cases for local and cloud new, unsupported cloud, `PATH_OUTSIDE_ROOTS`, and re-attach after a fake crash
   - _Requirements: 5.6, 6.1, 6.2, 6.3, 6.4, 6.5, 21.1, 21.2_
 
-- [ ] 6.2 kiro_session_list and kiro_session_load
+- [x] 6.2 kiro_session_list and kiro_session_load
   - `kiro_session_list`: scope, cwd (real path), source, `title_contains`, and limit filters, plus `omitted_count`. In user scope, hide local sessions outside the roots
   - `kiro_session_load`:
     - registers the handler before `session/load`;

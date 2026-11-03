@@ -359,10 +359,96 @@ export class SessionRegistry extends EventEmitter {
     }
   }
 
+  /**
+   * One page-walk of session/list. Scope `user` lists every workspace;
+   * `workspace` lists sessions whose stored cwd equals `cwd` (a real path,
+   * Requirement 4.5).
+   */
+  async listStore(scope: "workspace" | "user", cwd: string): Promise<StoredSession[]> {
+    const out: StoredSession[] = [];
+    let cursor: unknown;
+    for (let page = 0; page < 20; page++) {
+      const result = (await this.host.call("session/list", {
+        cwd,
+        ...(cursor !== undefined ? { cursor } : {}),
+        ...(scope === "user" ? { _meta: { kiro: { scope: "user" } } } : {}),
+      })) as { sessions?: unknown[]; nextCursor?: unknown } | null;
+      for (const raw of result?.sessions ?? []) {
+        const parsed = parseStored(raw);
+        if (parsed !== null) out.push(parsed);
+      }
+      cursor = result?.nextCursor;
+      if (cursor === undefined || cursor === null) break;
+    }
+    return out;
+  }
+
+  /** Find a session in Kiro's store by id (user scope). */
+  async findStored(sessionId: string): Promise<StoredSession | null> {
+    const all = await this.listStore("user", this.roots.primary);
+    return all.find((s) => s.sessionId === sessionId) ?? null;
+  }
+
+  /**
+   * Attach a session that may not be attached yet: an attached session is
+   * returned (re-attached if the host restarted); otherwise it is looked up in
+   * Kiro's store and loaded. Local sessions must live inside a root; remote
+   * sessions skip the check (Requirement 21.5).
+   */
+  async attachById(sessionId: string, opts: { cwd?: string; additionalDirectories?: string[] } = {}): Promise<{ session: AttachedSession; loaded: boolean }> {
+    const existing = this.sessions.get(sessionId);
+    if (existing !== undefined && !existing.closed) return { session: await this.ensureAttached(sessionId), loaded: false };
+    await this.host.ensureStarted();
+    const stored = await this.findStored(sessionId);
+    const remote = stored?.source === "remote";
+    let cwd: string;
+    if (opts.cwd !== undefined) cwd = await this.roots.resolveInside(opts.cwd);
+    else if (stored?.cwd && !remote) cwd = await this.roots.resolveInside(stored.cwd);
+    else cwd = stored?.cwd ?? this.roots.primary;
+    const additionalDirectories = await Promise.all((opts.additionalDirectories ?? []).map((d) => this.roots.resolveInside(d, cwd)));
+    const session = await this.load(sessionId, {
+      cwd,
+      additionalDirectories,
+      source: remote ? "remote" : "local",
+      executionTarget: stored?.executionTarget ?? (remote ? "cloud-sandbox" : "local"),
+    });
+    return { session, loaded: true };
+  }
+
   /** Check a session's root: local sessions must be inside a root, remote sessions skip the check. */
   async resolveCwd(cwd: string): Promise<string> {
     return this.roots.resolveInside(cwd);
   }
+}
+
+export interface StoredSession {
+  sessionId: string;
+  cwd: string | null;
+  title: string | null;
+  updatedAt: string | null;
+  source: "local" | "remote";
+  executionTarget: string | null;
+  status: string | null;
+  agentMode: string | null;
+}
+
+function parseStored(raw: unknown): StoredSession | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  const kiro = ((r._meta as Record<string, unknown> | undefined)?.kiro ?? {}) as Record<string, unknown>;
+  const s = (v: unknown) => (typeof v === "string" ? v : null);
+  const sessionId = s(r.sessionId);
+  if (sessionId === null) return null;
+  return {
+    sessionId,
+    cwd: s(r.cwd),
+    title: s(r.title),
+    updatedAt: s(r.updatedAt) ?? s(r.lastModifiedAt),
+    source: (s(kiro.source) ?? s(r.source)) === "remote" ? "remote" : "local",
+    executionTarget: s(kiro.executionTarget) ?? s(r.executionTarget),
+    status: s(kiro.status) ?? s(r.status),
+    agentMode: s(kiro.agentMode) ?? s(r.agentMode),
+  };
 }
 
 /** Map Kiro's "session not found" errors to SESSION_NOT_FOUND. */

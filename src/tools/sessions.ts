@@ -6,7 +6,7 @@ import type { Core } from "../core.js";
 import { ToolError } from "../errors.js";
 import type { AttachedSession } from "../sessions.js";
 import { defineTool } from "./define.js";
-import { commandsView, configOptionView, contextUsageView, modeView, name, pathInput } from "./schemas.js";
+import { commandsView, configOptionView, contextUsageView, json, modeView, name, pathInput, sessionId } from "./schemas.js";
 import { commandsOf, configOptionsOf, contextUsageOf, currentValue, modesOf } from "./views.js";
 
 export const REPO_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\/[A-Za-z0-9_.][A-Za-z0-9_.-]{0,99}$/;
@@ -41,8 +41,144 @@ export async function waitForCatalog(session: AttachedSession, ms = CATALOG_WAIT
   while (session.commands.length === 0 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 20));
 }
 
+export function replaySummary(session: AttachedSession) {
+  const replayed = session.feed.read(0, LIMITS.feedEvents).events.filter((e) => e.replay === true);
+  const messages = replayed.filter((e) => e.type === "message" || e.type === "user_message");
+  const lastAgent = [...replayed].reverse().find((e) => e.type === "message");
+  const text = lastAgent !== undefined && lastAgent.type === "message" ? lastAgent.text : null;
+  return { message_count: messages.length, last_agent_message: text === null ? null : text.slice(0, 500) };
+}
+
 export function registerSessionTools(server: McpServer, core: Core): void {
   const { roots, host, sessions } = core;
+
+  defineTool(
+    server,
+    "kiro_session_list",
+    {
+      title: "List Kiro sessions",
+      description:
+        "List saved Kiro sessions with session/list: scope `workspace` (sessions whose cwd is `cwd`, default the first root) or `user` " +
+        "(every workspace; local sessions outside KIRO_MCP_ROOTS are left out and only counted). Filters by source (local or remote cloud sessions), " +
+        "title substring, and limit run on this server and report how many were left out.",
+      input: z
+        .object({
+          scope: z.enum(["workspace", "user"]).optional(),
+          cwd: pathInput("Workspace directory inside KIRO_MCP_ROOTS (default: the first root).").optional(),
+          source: z.enum(["local", "remote"]).optional(),
+          title_contains: z.string().min(1).max(200).optional(),
+          limit: z.number().int().min(1).max(500).optional(),
+        })
+        .strict(),
+      output: z.object({
+        sessions: z.array(
+          z.object({
+            session_id: z.string(),
+            cwd: z.string().nullable(),
+            title: z.string().nullable(),
+            updated_at: z.string().nullable(),
+            source: z.string(),
+            execution_target: z.string().nullable(),
+            status: z.string().nullable(),
+            agent_mode: z.string().nullable(),
+            attached: z.boolean(),
+          }),
+        ),
+        omitted_count: z.number(),
+        omitted_outside_roots: z.number(),
+      }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    async (args) => {
+      const scope = args.scope ?? "workspace";
+      const cwd = args.cwd !== undefined ? await roots.resolveInside(args.cwd) : roots.primary;
+      let list = await sessions.listStore(scope, cwd);
+      let outsideRoots = 0;
+      if (scope === "user") {
+        const kept = list.filter((s) => s.source === "remote" || (s.cwd !== null && roots.contains(s.cwd)));
+        outsideRoots = list.length - kept.length;
+        list = kept;
+      }
+      const before = list.length;
+      if (args.source !== undefined) list = list.filter((s) => s.source === args.source);
+      if (args.title_contains !== undefined) {
+        const needle = args.title_contains.toLowerCase();
+        list = list.filter((s) => (s.title ?? "").toLowerCase().includes(needle));
+      }
+      list.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
+      const limited = args.limit !== undefined ? list.slice(0, args.limit) : list;
+      return {
+        sessions: limited.map((s) => ({
+          session_id: s.sessionId,
+          cwd: s.cwd,
+          title: s.title,
+          updated_at: s.updatedAt,
+          source: s.source,
+          execution_target: s.executionTarget,
+          status: s.status,
+          agent_mode: s.agentMode,
+          attached: sessions.get(s.sessionId)?.closed === false,
+        })),
+        omitted_count: before - limited.length,
+        omitted_outside_roots: outsideRoots,
+      };
+    },
+  );
+
+  defineTool(
+    server,
+    "kiro_session_load",
+    {
+      title: "Load a Kiro session",
+      description:
+        "Resume a saved local or cloud session (session/load) and attach it to this server, like `kiro-cli chat --resume-id`. " +
+        "Pass `session_id`, or `latest: true` with `cwd` for the most recently updated session in that workspace (`--resume`). " +
+        "Replayed history goes into the session's event feed marked replay; the result has a short replay summary and the cursor to poll from. " +
+        "Cloud sessions keep streaming, and approvals that were waiting are returned in pending_permissions.",
+      input: z
+        .object({
+          session_id: sessionId.optional(),
+          latest: z.boolean().optional(),
+          cwd: pathInput("Workspace directory inside KIRO_MCP_ROOTS.").optional(),
+          additional_directories: z.array(pathInput("Extra directory inside KIRO_MCP_ROOTS.")).max(10).optional(),
+        })
+        .strict(),
+      output: z.object({
+        ...sessionSummaryShape,
+        source: z.string(),
+        execution_target: z.string(),
+        already_attached: z.boolean(),
+        replay_summary: z.object({ message_count: z.number(), last_agent_message: z.string().nullable() }),
+        pending_permissions: z.array(json),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    async (args) => {
+      let id = args.session_id;
+      if (id === undefined) {
+        if (args.latest !== true) throw new ToolError("SESSION_NOT_FOUND", "pass session_id, or latest: true with cwd");
+        const cwd = args.cwd !== undefined ? await roots.resolveInside(args.cwd) : roots.primary;
+        const list = await sessions.listStore("workspace", cwd);
+        list.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
+        const newest = list[0];
+        if (newest === undefined) throw new ToolError("SESSION_NOT_FOUND", `no saved session for ${cwd}`, { cwd });
+        id = newest.sessionId;
+      }
+      const { session, loaded } = await sessions.attachById(id, {
+        ...(args.cwd !== undefined ? { cwd: args.cwd } : {}),
+        ...(args.additional_directories !== undefined ? { additionalDirectories: args.additional_directories } : {}),
+      });
+      await waitForCatalog(session, loaded ? 300 : 0);
+      return {
+        ...sessionSummary(session),
+        source: session.source,
+        execution_target: session.executionTarget,
+        already_attached: !loaded,
+        replay_summary: replaySummary(session),
+        pending_permissions: core.pendingPermissions(session.sessionId),
+      };
+    },
+  );
 
   defineTool(
     server,
