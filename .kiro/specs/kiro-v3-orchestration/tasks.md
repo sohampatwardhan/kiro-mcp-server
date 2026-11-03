@@ -346,7 +346,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - Tests: `test/tangent.test.ts` and a smoke case for branch, merge, and tree
   - _Requirements: 16.3, 16.4, 16.5, 16.6, 16.7, 16.8_
 
-- [ ] 11. Specs reader
+- [x] 11. Specs reader
   - `src/specs.ts` and `src/tools/specs.ts` `kiro_specs`:
     - `list` shows the folders under `cwd/.kiro/specs` with which documents exist, their modification times, and checked and unchecked task counts;
     - `read` returns a document up to the read cap, with parsed tasks for `tasks.md`;

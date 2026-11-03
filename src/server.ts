@@ -9,6 +9,7 @@ import { registerConfigureTools } from "./tools/configure.js";
 import { registerHistoryTools } from "./tools/history.js";
 import { registerPermissionTools } from "./tools/permissions.js";
 import { registerSessionTools } from "./tools/sessions.js";
+import { registerSpecTools } from "./tools/specs.js";
 import { registerStatusTools } from "./tools/status.js";
 import { registerControlTools, registerTurnTools } from "./tools/turns.js";
 
@@ -36,6 +37,7 @@ export function createServer(config: Config): KiroServer {
   registerControlTools(server, core);
   registerPermissionTools(server, core, broker);
   registerBranchingTools(server, core);
+  registerSpecTools(server, core);
   core.closeHooks.push(async (session) => {
     core.cancelPermissions(session.sessionId);
     await core.turns.cancel(session, 5_000);
