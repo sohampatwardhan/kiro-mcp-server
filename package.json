@@ -1,6 +1,6 @@
 {
   "name": "@sohampatwardhan/kiro-mcp-server",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP server that lets AI agents (Grok Bot, Claude, Cursor, Codex, and other MCP clients) orchestrate Kiro CLI V3 sessions through typed tools. Requires kiro-cli installed and signed in (run `kiro-cli login`).",
   "license": "MIT",
   "author": "Soham Patwardhan",
