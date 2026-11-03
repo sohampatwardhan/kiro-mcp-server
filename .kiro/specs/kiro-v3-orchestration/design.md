@@ -2,7 +2,7 @@
 
 ## Overview
 
-`kiro-mcp-server` is a Node.js 20+ TypeScript MCP stdio server with 31 typed tools that orchestrate Kiro CLI V3. It copies the shape of `claude-code-mcp-server`:
+`kiro-mcp-server` is a Node.js 20+ TypeScript MCP stdio server with 32 typed tools and one subscribable transcript resource that orchestrate Kiro CLI V3. It copies the shape of `claude-code-mcp-server`:
 
 - the same `src/` and `test/` layout;
 - `@modelcontextprotocol/sdk` and `zod` as the only runtime dependencies;
@@ -84,14 +84,26 @@ Both paths share one update normalizer, so events look the same.
 
 ### Decisions
 
-- **One shared host, not one per workspace.** ACP sessions each carry their own `cwd`. One host keeps MCP startup cost and memory low. If it crashes, the server detaches every session and re-attaches each one with `session/load` the next time it is used (Requirement 5.5, 5.6). The host runs with `cwd` set to the first root.
-- **Hand-rolled JSON-RPC, no ACP SDK dependency.** The framing is about 200 lines. Most of the surface is Kiro's `_kiro/*` extensions, which an SDK would not type. This keeps the sibling's two-dependency rule. See the open questions.
-- **No v2 adapter.** The v2 ACP server has a different method catalog (`_kiro.dev/*`) and different permission fields, and Kiro's guide says to keep separate adapters. It is not cheap. V2 sessions are still reachable, because V3 `session/load` imports them.
-- **Turns settle only from the `session/prompt` response.** A `turn_end` info update never settles a turn (ACP migration guide, section 4).
-- **Prompt-then-poll.** MCP clients often time out at about 60 s, so `kiro_prompt` waits at most `MAX_WAIT_S` and then returns a cursor. `kiro_events` long-polls. Progress notifications are an extra.
-- **Commands go through the prompt only when advertised.** Kiro removed the generic command API. The server sends `/<name>` text only for names in the latest `available_commands_update` (skills, prompts, and custom-agent sub-agents). TUI commands are mapped to typed tools instead.
-- **Tangent is composed.** There is no ACP tangent method. Branch is `session/fork` at the latest message. Merge is one summary prompt in the tangent plus one prompt in the destination. The tree is held in memory.
-- **Unadvertised methods are allow-listed.** `KNOWN_UNADVERTISED` lists `_kiro/account/getUsage`, `_kiro/session/rename`, and `_session/steer`. Any other optional method is called only when advertised. Method-not-found always maps to `UNSUPPORTED_BY_KIRO`.
+Decisions 9 to 14 were settled on issue #2 (the decisions comment). The shell question had no reply, so it keeps the recommended default.
+
+| # | Decision | Rationale |
+| --- | --- | --- |
+| 1 | One shared host, not one per workspace. The host runs with `cwd` set to the first root | ACP sessions each carry their own `cwd`. One host keeps MCP startup cost and memory low. A crash detaches every session, and each is re-attached with `session/load` the next time it is used (Requirement 5.5, 5.6) |
+| 2 | Turns settle only from the `session/prompt` response | A `turn_end` info update never settles a turn (ACP migration guide, section 4) |
+| 3 | Prompt-then-poll: `kiro_prompt` waits at most `MAX_WAIT_S`, then returns a cursor. `kiro_events` long-polls. Progress notifications are an extra | MCP clients often time out at about 60 s |
+| 4 | Commands go through the prompt only when advertised | Kiro removed the generic command API. `/<name>` text is sent only for names in the latest `available_commands_update` (skills, prompts, custom-agent sub-agents). TUI commands map to typed tools |
+| 5 | Tangent is composed and held in memory | There is no ACP tangent method. Branch is `session/fork` at the latest message. Merge is one summary prompt in the tangent plus one prompt in the destination |
+| 6 | Unadvertised methods are allow-listed in `KNOWN_UNADVERTISED`: `_kiro/account/getUsage`, `_kiro/session/rename`, `_session/steer` | Any other optional method is called only when advertised. Method-not-found always maps to `UNSUPPORTED_BY_KIRO` |
+| 7 | Transcript streaming reuses the session event feed. `kiro_stream_session` is a filtered, size-capped, auto-attaching read of it, and the transcript resource is a view of the same feed (Requirement 26) | One buffer and one cursor space for `kiro_events`, the stream tool, and the resource. No second copy of events |
+| 8 | Resource update notifications are coalesced per URI with a 250 ms timer | Meets the 1 s target (26.6) without one notification per chunk |
+| 9 | Workspace trust: the README tells operators to trust each folder once in `kiro-cli --v3`. `kiro_status` warns when a root is not trusted (2.6) | ACP has no method for trusting a workspace. The check reads `workspaceTrusted` from `~/.kiro/workspace-roots/<first 16 hex of sha256(realpath)>/permissions.yaml`, read-only. That layout is undocumented (it was confirmed on 2.37.1), so a missing file reports `false` and an unreadable or unparsable one reports `null`. The home directory always reports `false`, because Kiro never saves trust for it |
+| 10 | No v2 adapter: 0.1.0 is V3 only | The v2 ACP server has a different method catalog (`_kiro.dev/*`) and different permission fields, and Kiro's guide says to keep separate adapters. V2 sessions stay reachable because V3 `session/load` imports them |
+| 11 | Hand-written JSON-RPC, no ACP SDK dependency | The framing is about 200 lines, most of the surface is `_kiro/*` extensions an SDK would not type, and it keeps the sibling's two-dependency rule. Revisit the ACP TypeScript SDK if ACP churns |
+| 12 | Elicitation: when the client declares the elicitation capability, pending permissions under `ask` are also sent as a form elicitation. Otherwise, and on `cancel` or error, they wait for `kiro_permissions` and `kiro_permission_respond` (12.11) | Lets a person at the client answer directly while keeping polling as the universal path. The enum lists only options the server would accept, so the gates in 12.5 and 12.7 still hold |
+| 13 | Login stays human-only. `kiro_status` reports a signed-out CLI and gives the `kiro-cli login` command | Login needs a person in a browser or device flow. The server never relays authorization URLs or codes |
+| 14 | Shell approvals stay off by default (`KIRO_MCP_ALLOW_SHELL`), with the opt-in documented in the README and the skill | Same default as `claude-code-mcp-server`. ACP sessions cannot run tests until the operator opts in |
+| 15 | Skills live in `skills/` at the repository root and install from GitHub with `npx skills`. They are not in the npm package | `npx skills add <owner>/<repo>` reads the repository. CI installs from the checkout, so the tested path is the published path (Requirement 27) |
+| 16 | The SemVer check script is copied from `KaTeX-Agent-Skill/scripts/check-skill-versions.mjs` | It is dependency-free and requires a quoted version, as issue #3 asks |
 
 ### Requirement coverage
 
@@ -116,15 +128,10 @@ Both paths share one update normalizer, so events look the same.
 | 23 Config | `src/tools/config.ts`, `src/argv.ts` |
 | 24 Process safety | `src/children.ts`, `src/cli.ts` |
 | 25 Errors and output | `src/errors.ts`, `SERVER_INSTRUCTIONS` |
-
-### Open questions for review
-
-1. **Workspace trust over ACP.** No ACP method to trust a workspace was found. In an untrusted folder, Kiro does not load the workspace's agents, steering, MCP servers, or skills, and it asks before every shell and MCP call. Should the server document "run `kiro-cli --v3` once in the folder and trust it", or should it gate a trust action behind `KIRO_MCP_ALLOW_TRUST_WORKSPACE` if Kiro adds one?
-2. **Shell approvals default off.** This mirrors the sibling's `CLAUDE_MCP_LOCAL_ALLOW_SHELL`. With it off, Kiro cannot run tests or builds in ACP sessions. Is off the right default, or should `ask` allow one-time shell approvals?
-3. **No v2 adapter.** Is dropping CLI 2.x ACP support acceptable for 0.1.0?
-4. **Hand-rolled JSON-RPC** versus adding the ACP TypeScript SDK as a third runtime dependency.
-5. **MCP elicitation.** When the client supports elicitation, should permission requests also be forwarded to the client user as an MCP elicitation? This is not in this spec.
-6. **Login.** `kiro-cli login --use-device-flow` prints a URL and a code that could be relayed to the calling agent. The spec treats login as human-only. Should a gated relay exist?
+| 26 Transcript streaming | `src/tools/stream.ts`, `src/transcript.ts`, `EventFeed` |
+| 27 Bundled skills | `skills/kiro-orchestration/`, `scripts/check-skill-versions.mjs`, the `skills` CI job |
+| 2.6 Workspace trust | `src/trust.ts` |
+| 12.11 Elicitation | `src/permissions.ts` `PermissionBroker.elicit` |
 
 ## Architecture
 
@@ -284,7 +291,12 @@ src/tools/extensions.ts   kiro_memory, kiro_knowledge, kiro_code_intelligence, k
 src/tools/specs.ts        kiro_specs
 src/tools/headless.ts     kiro_run_headless
 src/tools/config.ts       kiro_agents, kiro_mcp_config, kiro_settings, kiro_powers
+src/tools/stream.ts       kiro_stream_session, the kiro-session://{session_id}/transcript resource, subscriptions
+src/transcript.ts         readStream (type filter, max_chars, gap), TranscriptNotifier (coalesced resources/updated)
+src/trust.ts              workspaceTrust(root): read-only check of Kiro's saved workspace trust
 test/fixtures/fake-kiro.mjs   stand-in kiro-cli: acp server, headless chat, subcommands
+skills/kiro-orchestration/SKILL.md   agent skill, plus references/ (Requirement 27)
+scripts/check-skill-versions.mjs     SemVer check for every SKILL.md
 ```
 
 ### Tool table
@@ -334,6 +346,11 @@ All inputs are strict zod objects. Ids are validated with patterns:
 | `kiro_mcp_config` | `mcp list`, `status`, `add --url`, `remove` | `action`, `scope?`, `name?`, `url?`, `agent?`, `timeout_ms?`, `disabled?`, `force?` | servers, raw |
 | `kiro_settings` | `settings list --format json`, `settings <key> <value>`, `settings --delete` | `action`, `keys?`, `all?`, `key?`, `value?`, `workspace?` | settings |
 | `kiro_powers` | powers snapshot, `powers install`, `uninstall` | `action`, `session_id?`, `name_or_path?` | powers or command result |
+| `kiro_stream_session` | event feed, `session/load` when not attached | `session_id`, `cursor?`, `wait_s?`, `types?`, `max_chars?`, `include_thoughts?` | events, next_cursor, lowest_cursor, gap, truncated, turn_status, session_state, pending_permissions |
+
+Resource template `kiro-session://{session_id}/transcript` (`application/json`): `{ session_id, session_state, turn_status, lowest_cursor, next_cursor, events }` with the newest events that fit the resource cap. `resources/list` lists attached and recently closed sessions. `resources/subscribe` and `resources/unsubscribe` are handled on the low-level server, and `TranscriptNotifier` sends `notifications/resources/updated` for subscribed URIs when their feed grows.
+
+`kiro_stream_session` `types` values: `message`, `thought`, `tool_call`, `plan`, `permission` (both permission event types), `turn`, `state`, `steering`, `workflow`, `notice`, `unknown`. Thoughts are left out unless `include_thoughts` is true or `types` names `thought`.
 
 ### Core types
 
@@ -402,6 +419,7 @@ classDiagram
     +list(sessionId) PendingPermission[]
     +respond(permissionId, optionId, consent) void
     +rejectAll(sessionId, reason) void
+    +elicit(pending) Promise
   }
   class JobStore {
     +create(kind) Job
@@ -482,6 +500,40 @@ export function assertHeadless(argv: string[]): void; // refuses a positional pr
 export function subcommandArgv(cmd: SubcommandSpec): string[]; // whoami, settings, agent, mcp, powers, diagnostic, doctor --all
 ```
 
+### Live transcript stream
+
+```mermaid
+sequenceDiagram
+  participant A as Calling agent
+  participant S as kiro-mcp-server
+  participant H as AcpHost
+  A->>S: resources/subscribe kiro-session://id/transcript
+  A->>S: kiro_stream_session session_id cursor 0
+  S->>S: session not attached
+  S->>H: session/load sessionId cwd
+  H-->>S: replay updates marked replay true
+  S-->>A: replay events, next_cursor, turn_status
+  H-->>S: session/update agent_message_chunk
+  S->>S: feed append, TranscriptNotifier timer 250 ms
+  S-->>A: notifications/resources/updated uri
+  A->>S: kiro_stream_session cursor next_cursor
+  S-->>A: new events, turn_status running
+```
+
+```ts
+// src/trust.ts
+export type TrustState = true | false | null; // null: file unreadable or unparsable
+export function workspaceTrust(root: string, home?: string): Promise<TrustState>;
+// sha256(realpath(root)).hex.slice(0, 16) under <home>/.kiro/workspace-roots/, line `workspaceTrusted: true`
+```
+
+```ts
+// src/transcript.ts
+export interface StreamPage { events: KiroEvent[]; nextCursor: number; lowestCursor: number; gap: boolean; truncated: boolean; omittedThoughts: number }
+export function readStream(feed: EventFeed, cursor: number, o: { types?: string[]; maxChars: number; limit: number; includeThoughts: boolean }): StreamPage;
+export class TranscriptNotifier { subscribe(uri: string): void; unsubscribe(uri: string): void; touched(sessionId: string): void }
+```
+
 ### Server instructions
 
 `SERVER_INSTRUCTIONS` (Requirement 25.5) tells calling agents:
@@ -491,6 +543,8 @@ export function subcommandArgv(cmd: SubcommandSpec): string[]; // whoami, settin
 - Answer `pending_permissions` with an `option_id` from the offered list only.
 - A turn finishes only from the prompt response.
 - Compose `/clear` as `kiro_session_new`, `/spawn` as `kiro_session_new` plus `kiro_prompt`, `/spec run` as Spec mode plus a prompt, and `/goal` as `kiro_workflow` or `autonomous` mode.
+- Follow a run live with `kiro_stream_session`, or subscribe to `kiro-session://<id>/transcript`.
+- Shell approvals are off unless the operator sets `KIRO_MCP_ALLOW_SHELL`, and workspaces must be trusted once in `kiro-cli --v3`.
 - Impossible features: archive import, attaching a repository later, file checkpoints, MCP OAuth, login, ACP workspace trust. Each comes with its reason.
 
 ### Configuration
@@ -531,6 +585,11 @@ Fixed limits, in `src/config.ts`:
 | Snapshot field cap | 4,000 characters |
 | Spec read cap | 200 KiB |
 | Repositories per cloud session | 10 |
+| `kiro_stream_session` `wait_s` | Default 1, maximum 55 |
+| `kiro_stream_session` `max_chars` | Default 20,000, maximum 200,000 |
+| Transcript resource cap | 256 KiB of serialized events, newest kept |
+| Resource update coalescing | 250 ms |
+| Closed-session feed retention | The job TTL, up to 50 closed sessions |
 
 ## Data Models
 
@@ -716,6 +775,10 @@ flowchart TB
 | `test/jobs.test.ts` | Job ids, status, TTL and cap, `settleWithin` (injected clock) |
 | `test/children.test.ts` | Process groups, scope cancel, `stopAll` (real `node` children, including a grandchild) |
 | `test/host.test.ts` | Spawn and initialize against the fake, method gating (`KNOWN_UNADVERTISED`), crash detaches sessions, re-attach with `session/load` before the next call, no prompt resent |
-| `test/smoke.test.ts` | Every tool over stdio through the SDK `Client`: schemas and `outputSchema`, server instructions, prompt-then-poll, permission respond, steer, cancel, fork, tangent, specs, extensions, cloud target, headless job lifecycle and exit codes, config write gates, error bodies, shutdown stopping every child |
+| `test/transcript.test.ts` | `readStream` type filter with cursor advance, `max_chars` truncation and resume, `gap`, idempotent re-reads, notifier coalescing (injected timer) |
+| `test/trust.test.ts` | `workspaceTrust` against a temp `HOME`: trusted, missing file, unreadable file, home directory |
+| `test/smoke.test.ts` | Every tool over stdio through the SDK `Client`: schemas and `outputSchema`, server instructions, prompt-then-poll, permission respond, steer, cancel, fork, tangent, specs, extensions, cloud target, headless job lifecycle and exit codes, config write gates, error bodies, shutdown stopping every child, `kiro_stream_session` on a loaded (not attached) session with replay, cancel and close, the transcript resource read, subscribe and `notifications/resources/updated`, and elicitation accept, decline, and cancel through a client that declares the capability |
+
+CI also runs a `skills` job: `node scripts/check-skill-versions.mjs skills`, then `npx -y skills add "$GITHUB_WORKSPACE" -g -y -a claude-code -a codex --json` with a throwaway `HOME` and `CI=true`, then `jq` asserts every entry is `installed` and a shell loop asserts each `skills/*/SKILL.md` exists under `$HOME/.agents/skills/` (Requirement 27.5).
 
 Smoke cases poll with helpers that wait for a condition (`pollEvents`, `waitFor`), never fixed sleeps. Unit tests use an injected clock for timeouts and TTLs. CI runs on `ubuntu-latest` with Node 22. Tests need nothing but Node.
