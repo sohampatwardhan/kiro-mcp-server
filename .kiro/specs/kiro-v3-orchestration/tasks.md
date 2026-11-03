@@ -315,7 +315,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - Tests: smoke cases for steer during a long turn, steer when idle, and cancel with a pending permission
   - _Requirements: 11.1, 11.2, 11.3_
 
-- [ ] 8. Permission broker and tools
+- [x] 8. Permission broker and tools
   - `src/permissions.ts` `PermissionBroker`:
     - records pending requests with options, consent, and untrusted MCP identity;
     - applies `KIRO_MCP_PERMISSIONS` (`ask`, `deny`, `allow`), the shell gate (`KIRO_MCP_ALLOW_SHELL`, consent capability `shell` or tool kind `execute`), and the timeout auto-reject;
