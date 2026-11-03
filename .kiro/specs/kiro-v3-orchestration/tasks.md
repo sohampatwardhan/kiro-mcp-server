@@ -229,7 +229,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - Tests: `test/host.test.ts` against the fake. Cover the start argv, capability storage, method gating, a crash that emits `hostExited`, a restart, and init failure
   - _Requirements: 1.4, 5.1, 5.2, 5.4, 5.5, 25.4_
 
-- [ ] 5. Event normalizer and feed
+- [x] 5. Event normalizer and feed
   - `src/events.ts`:
     - `normalizeUpdate()` for every update kind in the design's probe list, with chunk coalescing per turn segment, a tool-call merge by `toolCallId` (title never used for identity), `failureReason`, replay marking, and `unknown` for anything else;
     - `EventFeed`: a ring buffer with event and byte caps, `lowestCursor`, `read(cursor, limit)`, and `waitFor(cursor, ms, signal)`.
