@@ -184,7 +184,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - Tests: `test/children.test.ts` (real `node` children including a grandchild) and the argv cases in `test/argv-config.test.ts`
   - _Requirements: 1.3, 24.1, 24.2, 24.4, 24.5_
 
-- [ ] 3. Fake kiro-cli fixture
+- [x] 3. Fake kiro-cli fixture
   - `test/fixtures/fake-kiro.mjs`, not compiled. Dispatch on argv:
     - `acp` speaks NDJSON JSON-RPC with the probed `initialize` capability shape and the session methods and `_kiro/*` methods listed in the design's Testing Strategy;
     - `chat --v3 --no-interactive --output-format=stream-json` reads stdin and writes `runStarted`, `sessionUpdate`, and `runFinished`;
