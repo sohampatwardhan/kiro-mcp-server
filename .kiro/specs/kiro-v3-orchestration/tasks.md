@@ -428,7 +428,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
     - deletes the sessions it created.
   - _Requirements: 1.6_
 
-- [ ] 18. Live transcript streaming
+- [x] 18. Live transcript streaming
   - `src/transcript.ts`: `readStream()` over a session feed with the `types` filter (the cursor still advances past skipped events), `max_chars` truncation that resumes at the first event left out, `gap` when the cursor is below `lowestCursor`, and thought omission. `TranscriptNotifier` keeps subscribed URIs and coalesces `notifications/resources/updated` per URI on a 250 ms timer
   - `src/tools/stream.ts`:
     - `kiro_stream_session` with the short default `wait_s`, auto-attach through the same path as `kiro_session_load` when the session is not attached, and `session_state` (`attached` or `closed`) plus the turn status;
