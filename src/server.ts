@@ -8,6 +8,7 @@ import { registerConfigureTools } from "./tools/configure.js";
 import { registerHistoryTools } from "./tools/history.js";
 import { registerPermissionTools } from "./tools/permissions.js";
 import { registerSessionTools } from "./tools/sessions.js";
+import { registerStatusTools } from "./tools/status.js";
 import { registerControlTools, registerTurnTools } from "./tools/turns.js";
 
 export const SERVER_NAME = "kiro-mcp-server";
@@ -26,6 +27,7 @@ export function createServer(config: Config): KiroServer {
   const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION }, { instructions: SERVER_INSTRUCTIONS });
   const core = createCore(config, SERVER_VERSION);
   const broker = wirePermissions(server, core);
+  registerStatusTools(server, core);
   registerSessionTools(server, core);
   registerConfigureTools(server, core);
   registerHistoryTools(server, core);

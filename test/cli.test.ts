@@ -98,3 +98,16 @@ describe("prereq", () => {
     assert.match(cliNotFoundMessage("kiro-cli"), /brew install kiro-cli/);
   });
 });
+
+describe("parse", () => {
+  it("copies only accountType, email, and profile from whoami", async () => {
+    const { parseWhoami, parseProfile } = await import("../src/parse.js");
+    assert.deepEqual(parseWhoami(JSON.stringify({ accountType: "IdC", email: "a@b.c", accessToken: "T", profile: { name: "dev", arn: "x" } })), {
+      accountType: "IdC",
+      email: "a@b.c",
+      profile: "dev",
+    });
+    assert.equal(parseProfile("Profile: dev-profile\n"), "dev-profile");
+    assert.equal(parseProfile("No profile selected"), null);
+  });
+});

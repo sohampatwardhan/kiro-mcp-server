@@ -36,3 +36,32 @@ export function cleanTerminalText(text: string): string {
 export function tail(text: string, max: number): string {
   return text.length <= max ? text : text.slice(text.length - max);
 }
+
+export interface Account {
+  accountType: string | null;
+  email: string | null;
+  profile: string | null;
+}
+
+/** Only accountType, email, and the profile name are copied from `whoami --format json` (Requirement 2.2). */
+export function parseWhoami(stdout: string): Account {
+  const parsed = JSON.parse(stdout.trim()) as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === "string" && v !== "" ? v : null);
+  const profileObj = parsed.profile as Record<string, unknown> | string | undefined;
+  const profile = typeof profileObj === "string" ? str(profileObj) : str(profileObj?.name ?? profileObj?.profileName);
+  return { accountType: str(parsed.accountType ?? parsed.account_type), email: str(parsed.email), profile };
+}
+
+/** `kiro-cli profile` prints the IdC profile; returns its name, or null. */
+export function parseProfile(stdout: string): string | null {
+  const text = cleanTerminalText(stdout).trim();
+  if (text === "" || /no profile|not (?:an )?idc|not signed/i.test(text)) return null;
+  const labeled = /profile(?:\s+name)?\s*[:=]\s*(\S.*)$/im.exec(text);
+  const name = (labeled?.[1] ?? text.split("\n")[0] ?? "").trim();
+  return name.length > 0 && name.length <= 200 ? name : null;
+}
+
+/** Parse JSON output, or throw OUTPUT_PARSE_FAILED-style errors to the caller. */
+export function parseJson(stdout: string): unknown {
+  return JSON.parse(stdout.trim());
+}

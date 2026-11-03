@@ -327,7 +327,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - Tests: `test/permissions.test.ts` (the policy matrix, with an injected clock for the timeout) and smoke cases for respond allow, respond reject, the shell gate, the timeout, and elicitation accept, decline, and cancel through a client that declares the capability
   - _Requirements: 12.1, 12.2, 12.3, 12.4, 12.5, 12.6, 12.7, 12.8, 12.9, 12.10, 12.11_
 
-- [ ] 9. Status and usage
+- [x] 9. Status and usage
   - `src/tools/status.ts`:
     - `kiro_status` returns the CLI path and version, the engine V3 init result, capabilities, roots, policy, log paths, and dropped-line count, plus `whoami --format json` and `profile` (only `accountType`, `email`, and the profile name). When signed out it returns the sign-in instruction. `include_diagnostics` adds `diagnostic --format json` and `doctor --all`;
     - `kiro_usage` calls `_kiro/account/getUsage` and adds per-session credit totals. `UNSUPPORTED_BY_KIRO` still returns the session totals.
