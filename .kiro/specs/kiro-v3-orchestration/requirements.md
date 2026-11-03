@@ -117,6 +117,7 @@ stateDiagram-v2
 3. IF `whoami` reports that the user is not signed in THEN `kiro_status` SHALL return `signed_in: false` with the instruction to run `kiro-cli login` (or `kiro-cli login --use-device-flow` on a machine without a browser) in a terminal. It SHALL NOT start a login flow.
 4. WHERE the calling agent passes `include_diagnostics: true` THEN `kiro_status` SHALL also return the output of `kiro-cli diagnostic --format json` and `kiro-cli doctor --all`. It SHALL never run `doctor` without `--all`, because that form may apply fixes.
 5. IF a tool other than `kiro_status` fails because Kiro reports an authentication error THEN that tool SHALL fail with `CLI_NOT_SIGNED_IN` and the same sign-in instruction.
+6. WHEN `kiro_status` runs THEN it SHALL report, for each root, whether Kiro has saved workspace trust for it (`true`, `false`, or `null` when unknown). IF a root is not trusted THEN `kiro_status` SHALL add a warning telling the operator to run `kiro-cli --v3` once in that folder and choose **Trust, continue**. The server SHALL never write trust itself.
 
 ### Requirement 3
 
@@ -206,7 +207,7 @@ stateDiagram-v2
    - cancel the session's running turn;
    - reject its pending permissions;
    - call `session/close`;
-   - drop its event feed after returning the final cursor.
+   - return the final cursor, and keep the event feed read-only for the job TTL so that streams can drain it (Requirement 26), then drop it.
 2. WHEN the calling agent calls `kiro_session_delete` with `confirm: true` THEN the server SHALL close the session if it is attached and call `session/delete`.
 3. IF `kiro_session_delete` is called without `confirm: true` THEN the server SHALL fail with `CONFIRMATION_REQUIRED` and delete nothing.
 4. IF `kiro_session_delete` names a local session whose `cwd` is outside every root THEN it SHALL fail with `PATH_OUTSIDE_ROOTS`.
@@ -285,6 +286,7 @@ stateDiagram-v2
 8. WHILE `KIRO_MCP_PERMISSIONS` is `deny` THEN the server SHALL answer every request with the offered `reject_once` option. WHILE it is `allow` THEN the server SHALL answer with the offered `allow_once` option, except where criterion 7 applies.
 9. IF a pending permission stays unanswered for `KIRO_MCP_PERMISSION_TIMEOUT_MS` THEN the server SHALL answer it with the offered `reject_once` option and record `policy: "timeout"`.
 10. WHEN a tool request is denied THEN the turn SHALL continue. A plain denial SHALL stay distinct from a cancellation in the tool-call record.
+11. WHERE the MCP client declared the elicitation capability and a permission stays pending under `ask` THEN the server SHALL also send it to the client as a form elicitation whose only field is an enum of the offered option ids it would accept through `kiro_permission_respond` (criteria 5 and 7 still apply). An `accept` SHALL answer the request with that option. A `decline` SHALL answer it with the offered `reject_once` option. A `cancel`, an error, or a client without elicitation SHALL leave it pending for `kiro_permissions` and `kiro_permission_respond`.
 
 ### Requirement 13
 
@@ -495,6 +497,32 @@ stateDiagram-v2
    - how to compose `/spec run`, `/goal`, `/clear`, and `/spawn`;
    - which features are impossible and why.
 
+### Requirement 26
+
+**User Story:** As a calling agent, I want to follow a Kiro session's transcript live, by polling a cursor or by subscribing to a resource, so that I can watch a run as it happens instead of waiting for its final result. (Issue #1.)
+
+#### Acceptance Criteria
+
+1. WHEN the calling agent calls `kiro_stream_session` with a `session_id` and an optional `cursor` THEN the server SHALL return the transcript events after that cursor (agent text, tool calls and results, plan updates, permission requests, and turn events), the next cursor, the turn status, and whether the session is `attached` or `closed`. When no event is newer than the cursor, it SHALL wait up to `wait_s`, with the short default and the maximum set in the design.
+2. IF the session is not attached THEN `kiro_stream_session` SHALL attach it with `session/load` as `kiro_session_load` does (Requirement 7.4, 7.7, 21.4), so that its replayed history comes first, marked `replay: true`, followed by live events.
+3. WHEN `kiro_stream_session` is called twice with the same cursor THEN it SHALL return the same events while they remain in the feed. IF the cursor is older than the lowest cursor still held THEN it SHALL start at the lowest cursor and return `gap: true`.
+4. WHERE `types` is given THEN `kiro_stream_session` SHALL return only events of those types, and still advance the cursor past the events it skipped. WHERE `max_chars` is given THEN it SHALL stop adding events once their serialized size would pass that cap, return `truncated: true`, and set the next cursor so that the next call continues with the first event it left out.
+5. WHEN the calling agent reads the resource `kiro-session://<session_id>/transcript` THEN the server SHALL return the newest events of that session's feed as JSON, capped at the resource cap, attaching the session first as in criterion 2. `resources/list` SHALL list one transcript resource per attached or recently closed session.
+6. WHEN the client sends `resources/subscribe` for a transcript resource and new events reach that session's feed THEN the server SHALL send `notifications/resources/updated` for that URI within 1 second, coalescing bursts, until `resources/unsubscribe` or the session's feed is dropped.
+7. WHEN a turn is cancelled or the session is closed THEN the stream SHALL deliver the turn's settled event and report the final turn status, and a closed session SHALL report `closed` with its remaining events (Requirement 8.1).
+
+### Requirement 27
+
+**User Story:** As an operator, I want agent skills shipped with the server and installable with `npx skills`, so that my agents know when and how to use its tools. (Issue #3.)
+
+#### Acceptance Criteria
+
+1. The repository SHALL ship at least one skill at `skills/<name>/SKILL.md` with YAML front matter `name`, `description` (when to use it), and `metadata` with `author: Soham Patwardhan` and a quoted SemVer 2.0.0 `version`.
+2. The skills SHALL cover delegating a task to Kiro, choosing mode, model, effort, and permission handling, following a run live (Requirement 26), collecting results and patches, and recovering when a session or host fails.
+3. WHEN CI runs THEN `scripts/check-skill-versions.mjs`, the same check used in the author's other skill repositories, SHALL fail the build if any `SKILL.md` lacks a quoted SemVer `metadata.version`.
+4. The README SHALL have an **Install the skills** section with `npx skills add sohampatwardhan/kiro-mcp-server -g`, plus `--skill <name>` and `-a <agent>` examples.
+5. WHEN CI runs THEN a job SHALL install the skills from the checkout into a throwaway `HOME` with `npx -y skills add "$GITHUB_WORKSPACE" -g -y -a claude-code -a codex --json`, and SHALL fail unless every reported entry has `status: "installed"` and every shipped skill's `SKILL.md` exists under the throwaway `HOME`.
+
 ## Feature-parity matrix
 
 Every capability from the Kiro CLI V3 docs (`v3.md` parity table, the slash-command reference, the headless and ACP migration guides) and from `kiro-cli --help-all` maps to a row below. Status values:
@@ -569,6 +597,7 @@ flowchart LR
 | Rate limit and model fallback notices | `_kiro/error/rate_limit`, fallback reporting | `kiro_events` | 10.7 | Exposed | |
 | Sub-agent monitor (Ctrl+G) | tool and subtask activity | `kiro_events` | 10.3 | Composed | There is no exact roster replacement in ACP |
 | MCP progress notifications | MCP `progressToken` | `kiro_prompt`, `kiro_events` | 10.9 | Exposed | An extra on top of polling |
+| Live transcript of any session | event feed, `session/load` replay | `kiro_stream_session`, resource `kiro-session://<id>/transcript` | 26.1–26.7 | Composed | Cursor polling or `resources/subscribe` |
 
 ### Modes, agents, models
 
@@ -600,13 +629,15 @@ flowchart LR
 | V3 capability | Source | MCP tool | Requirement | Status | Notes |
 | --- | --- | --- | --- | --- | --- |
 | Approval prompts | `session/request_permission` | `kiro_permissions`, `kiro_permission_respond` | 12.1–12.4, 12.10 | Exposed | |
+| Approval prompts shown to the client's user | MCP elicitation | forwarded by the server | 12.11 | Composed | Only when the client declares elicitation |
 | Hook confirmation requests | `session/request_permission` | same | 12.1 | Exposed | |
 | Shell approvals | consent capability `shell` | `kiro_permission_respond` | 12.7 | Gated | `KIRO_MCP_ALLOW_SHELL` |
 | Persistent consent (always allow or deny) | `_meta.kiro.consent` response | `kiro_permission_respond` | 12.5, 12.6 | Gated | `KIRO_MCP_ALLOW_PERSISTENT_CONSENT` |
 | Session-wide trust (`--trust-all-tools`, `/tools trust-all`) | rejected on `acp` | `KIRO_MCP_PERMISSIONS=allow` | 12.8 | Gated | The operator sets the policy. Shell still follows 12.7 |
 | Headless `--trust-all-tools`, `--trust-tools` | chat flags | `kiro_run_headless` | 22.4 | Gated | `KIRO_MCP_HEADLESS_TRUST` |
 | Headless `--trust-workspace` | chat flag | `kiro_run_headless` | 22.5 | Gated | `KIRO_MCP_ALLOW_TRUST_WORKSPACE` |
-| Trust a workspace for ACP sessions | none advertised | none | none | Impossible | No ACP trust method was found. Untrusted folders do not load workspace agents, steering, MCP, or skills. See the design's open questions |
+| Trust a workspace for ACP sessions | none advertised | none | none | Impossible | No ACP trust method was found. Untrusted folders do not load workspace agents, steering, MCP, or skills. The operator trusts each folder once in `kiro-cli --v3` |
+| Check workspace trust | `workspaceTrusted` in Kiro's per-workspace permissions file | `kiro_status` | 2.6 | Composed | Read-only and best-effort. See the design's Decisions |
 | Edit `permissions.yaml`, `/permissions` policies, Approve for me | files and TUI | none | none | Withheld | Widens persistent policy outside the consent flow |
 | Local command sandbox (`--sandbox`) | chat flag | `kiro_run_headless` `require_sandbox` | 22.1 | Exposed | |
 | Sandbox settings (`/sandbox`) | `sandbox.json`, TUI | none | none | Withheld | Policy files, as above |
