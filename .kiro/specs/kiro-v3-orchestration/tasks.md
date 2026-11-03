@@ -205,7 +205,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - _Requirements: 1.6_
 
 - [ ] 4. ACP channel
-- [ ] 4.1 JSON-RPC NDJSON peer
+- [x] 4.1 JSON-RPC NDJSON peer
   - `src/acp/jsonrpc.ts` `JsonRpcPeer`:
     - line framing over a readable and writable pair;
     - `request` with ids and a per-request timeout;
