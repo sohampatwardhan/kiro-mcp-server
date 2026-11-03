@@ -152,7 +152,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - Gates every later task: it must pass before task 2.1 starts
 
 - [ ] 2. Foundation
-- [ ] 2.1 Package scaffold, config, and error model
+- [x] 2.1 Package scaffold, config, and error model
   - Add the following:
     - `package.json`: name `@sohampatwardhan/kiro-mcp-server`, bin `kiro-mcp-server` pointing to `dist/src/index.js` (no leading `./`), `type: module`, `engines.node >=20`, `files`, `publishConfig.access public`, and the `build`, `prepack`, `start`, and `test` scripts;
     - `package-lock.json`;

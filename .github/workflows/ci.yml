@@ -15,6 +15,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
       # Tests run only against test/fixtures/fake-kiro.mjs. No kiro-cli is installed and no secrets are set.
       - name: Install
         if: hashFiles('package-lock.json') != ''
