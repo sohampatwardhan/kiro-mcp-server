@@ -1,3 +1,5 @@
+import { existsSync, statSync } from "node:fs";
+
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
@@ -267,4 +269,102 @@ export function registerSessionTools(server: McpServer, core: Core): void {
       };
     },
   );
+
+  defineTool(
+    server,
+    "kiro_session_close",
+    {
+      title: "Close a Kiro session",
+      description:
+        "Close an attached session (session/close), like /quit: cancels its running turn, rejects its pending permissions, and returns the final cursor. " +
+        "The session stays in Kiro's store (use kiro_session_load to resume it), and its event feed stays readable for an hour so streams can drain.",
+      input: z.object({ session_id: sessionId }).strict(),
+      output: z.object({ session_id: z.string(), closed: z.boolean(), final_cursor: z.number() }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    async (args) => {
+      const session = sessions.require(args.session_id);
+      await closeSession(core, session);
+      return { session_id: session.sessionId, closed: true, final_cursor: session.feed.latestSeq };
+    },
+  );
+
+  defineTool(
+    server,
+    "kiro_session_delete",
+    {
+      title: "Delete a Kiro session",
+      description:
+        "Permanently delete a session from Kiro's store (session/delete), like `kiro-cli chat --delete-session`. Requires confirm: true. " +
+        "Closes the session first when it is attached. Local sessions must live inside KIRO_MCP_ROOTS.",
+      input: z.object({ session_id: sessionId, confirm: z.boolean().optional() }).strict(),
+      output: z.object({ session_id: z.string(), deleted: z.boolean() }),
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+    },
+    async (args) => {
+      if (args.confirm !== true) throw new ToolError("CONFIRMATION_REQUIRED", "kiro_session_delete needs confirm: true; nothing was deleted");
+      const attached = sessions.get(args.session_id);
+      if (attached === undefined || attached.closed) {
+        await host.ensureStarted();
+        const stored = await sessions.findStored(args.session_id);
+        if (stored === null) throw new ToolError("SESSION_NOT_FOUND", `Kiro has no session ${args.session_id}`);
+        if (stored.source === "local" && (stored.cwd === null || !roots.contains(stored.cwd))) {
+          throw new ToolError("PATH_OUTSIDE_ROOTS", "the session's workspace is outside KIRO_MCP_ROOTS; nothing was deleted");
+        }
+      } else {
+        await closeSession(core, attached);
+      }
+      await host.call("session/delete", { sessionId: args.session_id });
+      sessions.forget(args.session_id);
+      return { session_id: args.session_id, deleted: true };
+    },
+  );
+
+  defineTool(
+    server,
+    "kiro_session_export",
+    {
+      title: "Export a Kiro session",
+      description:
+        "Export a session to a file inside KIRO_MCP_ROOTS with _kiro/session/export, like /chat save. Fails with PATH_EXISTS unless overwrite is true. " +
+        "Importing an archive is not possible over ACP.",
+      input: z
+        .object({
+          session_id: sessionId,
+          path: pathInput("Destination file inside KIRO_MCP_ROOTS (relative paths resolve against the session's cwd)."),
+          overwrite: z.boolean().optional(),
+        })
+        .strict(),
+      output: z.object({ session_id: z.string(), path: z.string(), bytes: z.number() }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    },
+    async (args) => {
+      const { session } = await sessions.attachById(args.session_id);
+      const path = await roots.resolveForWrite(args.path, session.cwd);
+      if (existsSync(path) && args.overwrite !== true) throw new ToolError("PATH_EXISTS", `${path} already exists; pass overwrite: true to replace it`, { path });
+      const result = (await host.call("_kiro/session/export", { sessionId: session.sessionId, path })) as { path?: unknown; success?: unknown } | null;
+      if (result?.success === false) throw new ToolError("KIRO_REFUSED", "Kiro refused the export", { kiro: result });
+      const written = typeof result?.path === "string" ? result.path : path;
+      let bytes = 0;
+      try {
+        bytes = statSync(written).size;
+      } catch {
+        throw new ToolError("KIRO_ERROR", `Kiro reported an export but ${written} does not exist`);
+      }
+      return { session_id: session.sessionId, path: written, bytes };
+    },
+  );
+}
+
+/** Cancel, reject, close on the host, and mark closed (Requirement 8.1). */
+export async function closeSession(core: Core, session: AttachedSession): Promise<void> {
+  for (const hook of core.closeHooks) await hook(session);
+  if (!session.detached && core.host.state === "ready") {
+    try {
+      await core.host.call("session/close", { sessionId: session.sessionId });
+    } catch (err) {
+      if (!(err instanceof ToolError) || (err.code !== "HOST_EXITED" && err.code !== "UNSUPPORTED_BY_KIRO")) throw err;
+    }
+  }
+  core.sessions.markClosed(session);
 }

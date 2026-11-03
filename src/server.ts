@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import type { Config } from "./config.js";
 import { createCore, type Core } from "./core.js";
+import { registerConfigureTools } from "./tools/configure.js";
 import { registerSessionTools } from "./tools/sessions.js";
 
 export const SERVER_NAME = "kiro-mcp-server";
@@ -20,5 +21,6 @@ export function createServer(config: Config): KiroServer {
   const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION }, { instructions: SERVER_INSTRUCTIONS });
   const core = createCore(config, SERVER_VERSION);
   registerSessionTools(server, core);
+  registerConfigureTools(server, core);
   return { server, core };
 }

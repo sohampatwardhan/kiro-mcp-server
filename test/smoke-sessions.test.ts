@@ -164,3 +164,53 @@ describe("kiro_session_list and kiro_session_load", () => {
     assert.equal((await c.fail("kiro_session_load", { session_id: ID(99) })).code, "SESSION_NOT_FOUND");
   });
 });
+
+describe("close, delete, export, and rename", () => {
+  let c: Connected;
+  before(async () => {
+    c = await connect({ setup: (work, dir) => seedStore(dir, work) });
+  });
+  after(() => c.close());
+
+  it("renames through kiro_session_configure", async () => {
+    const s = await c.ok<NewResult>("kiro_session_new", { cwd: c.work });
+    const r = await c.ok<{ title: string }>("kiro_session_configure", { session_id: s.session_id, title: "Renamed" });
+    assert.equal(r.title, "Renamed");
+    assert.deepEqual(requests(c, "_kiro/session/rename").at(-1)?.params, { sessionId: s.session_id, title: "Renamed" });
+  });
+
+  it("exports inside the roots and refuses to overwrite unless asked", async () => {
+    const s = await c.ok<NewResult>("kiro_session_new", { cwd: c.work });
+    const r = await c.ok<{ path: string; bytes: number }>("kiro_session_export", { session_id: s.session_id, path: "out/../session.json" });
+    assert.equal(r.path, join(c.work, "session.json"));
+    assert.ok(r.bytes > 0);
+    assert.equal((await c.fail("kiro_session_export", { session_id: s.session_id, path: "session.json" })).code, "PATH_EXISTS");
+    assert.equal((await c.call("kiro_session_export", { session_id: s.session_id, path: "session.json", overwrite: true })).isError, false);
+    assert.equal((await c.fail("kiro_session_export", { session_id: s.session_id, path: "/tmp/escape.json" })).code, "PATH_OUTSIDE_ROOTS");
+  });
+
+  it("closes a session and returns the final cursor", async () => {
+    const s = await c.ok<NewResult>("kiro_session_new", { cwd: c.work });
+    const r = await c.ok<{ closed: boolean; final_cursor: number }>("kiro_session_close", { session_id: s.session_id });
+    assert.equal(r.closed, true);
+    assert.ok(r.final_cursor >= 0);
+    assert.equal(requests(c, "session/close").length, 1);
+    assert.equal((await c.fail("kiro_session_close", { session_id: s.session_id })).code, "SESSION_NOT_FOUND");
+  });
+
+  it("deletes only with confirm: true and only inside the roots", async () => {
+    assert.equal((await c.fail("kiro_session_delete", { session_id: ID(1) })).code, "CONFIRMATION_REQUIRED");
+    assert.equal(requests(c, "session/delete").length, 0);
+    assert.equal((await c.fail("kiro_session_delete", { session_id: ID(3), confirm: true })).code, "PATH_OUTSIDE_ROOTS");
+    const r = await c.ok<{ deleted: boolean }>("kiro_session_delete", { session_id: ID(1), confirm: true });
+    assert.equal(r.deleted, true);
+    const list = await c.ok<ListResult>("kiro_session_list", {});
+    assert.ok(!list.sessions.some((s) => s.session_id === ID(1)));
+  });
+
+  it("closes an attached session before deleting it", async () => {
+    const s = await c.ok<NewResult>("kiro_session_new", { cwd: c.work });
+    await c.ok("kiro_session_delete", { session_id: s.session_id, confirm: true });
+    assert.ok(requests(c, "session/close").some((m) => (m.params as { sessionId: string }).sessionId === s.session_id));
+  });
+});

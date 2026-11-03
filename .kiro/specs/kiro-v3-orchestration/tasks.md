@@ -262,7 +262,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - Tests: smoke cases for list filtering, load with replay, latest, remote load, and an unknown id
   - _Requirements: 4.5, 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 21.4, 21.5_
 
-- [ ] 6.3 Close, delete, export, and rename
+- [x] 6.3 Close, delete, export, and rename
   - `kiro_session_close`: cancel, reject pending permissions, `session/close`, and return the final cursor. The closed session's feed stays read-only for the job TTL (up to 50 closed sessions) for streams to drain. `kiro_session_delete`: requires `confirm: true` and a root check for local sessions. `kiro_session_export`: destination inside a root, `PATH_EXISTS` unless `overwrite`. `title` on `kiro_session_configure` calls `_kiro/session/rename`
   - Tests: smoke cases for each tool, including `CONFIRMATION_REQUIRED` and `PATH_EXISTS`
   - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7_
