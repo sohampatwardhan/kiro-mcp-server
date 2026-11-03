@@ -204,7 +204,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - Rejects `--agent`, `--model`, `--effort`, and `--trust-*` on `acp`, as the real CLI does
   - _Requirements: 1.6_
 
-- [ ] 4. ACP channel
+- [x] 4. ACP channel
 - [x] 4.1 JSON-RPC NDJSON peer
   - `src/acp/jsonrpc.ts` `JsonRpcPeer`:
     - line framing over a readable and writable pair;
@@ -217,7 +217,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - Tests: `test/jsonrpc.test.ts`, with framing split at every chunk boundary
   - _Requirements: 5.3, 5.7_
 
-- [ ] 4.2 ACP host lifecycle
+- [x] 4.2 ACP host lifecycle
   - `src/acp/host.ts` `AcpHost`:
     - lazy `ensureStarted()` spawns `acpArgv()` (`assertAcp` refuses v2 flags) through the child registry, with the first root as `cwd`;
     - registers handlers before `initialize`, then stores capabilities;

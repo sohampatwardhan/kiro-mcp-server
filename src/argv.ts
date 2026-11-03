@@ -129,3 +129,21 @@ export function subcommandArgv(spec: SubcommandSpec): string[] {
       return ["powers", "uninstall", "--", spec.name];
   }
 }
+
+// ---- ACP host ----------------------------------------------------------------
+
+/** Flags the v3 `acp` command rejects. Agent, model, and effort are set after initialize. */
+const ACP_FORBIDDEN = /^(?:--agent|--model|--effort|--trust-all-tools|--trust-tools|-a)(?:=|$)/;
+
+/** argv for the long-lived ACP host (Requirement 5.1, 5.2). */
+export function acpArgv(): string[] {
+  const argv = ["acp", "--agent-engine=v3", "--auth-method=cli"];
+  assertAcp(argv);
+  return argv;
+}
+
+export function assertAcp(argv: string[]): void {
+  for (const arg of argv) {
+    if (ACP_FORBIDDEN.test(arg)) throw new ArgvError(`${arg} must not be passed to kiro-cli acp --agent-engine=v3`);
+  }
+}
