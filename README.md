@@ -64,6 +64,23 @@ args = ["-y", "@sohampatwardhan/kiro-mcp-server@latest"]
 env = { KIRO_MCP_ROOTS = "/home/me/code" }
 ```
 
+## Install the skills
+
+The repository ships agent skills that teach agents when and how to use these tools: delegating a task to Kiro, choosing mode, model, effort, and permission handling, following a run live, collecting results and patches, and recovering from failures. Install them with the [skills CLI](https://github.com/vercel-labs/skills):
+
+```bash
+npx skills add sohampatwardhan/kiro-mcp-server -g
+```
+
+Install one skill, or only for some agents:
+
+```bash
+npx skills add sohampatwardhan/kiro-mcp-server -g --skill kiro-orchestration
+npx skills add sohampatwardhan/kiro-mcp-server -g -a claude-code -a codex
+```
+
+Each skill's `SKILL.md` carries a SemVer `metadata.version`, checked in CI by `scripts/check-skill-versions.mjs`, and CI installs the skills from the checkout into a throwaway `HOME` to test this exact path.
+
 ## Environment variables
 
 All are optional. An invalid value makes the server print the variable name and reason on stderr and exit with code 2. Booleans accept `1`, `true`, `yes`, `0`, `false`, `no`.

@@ -26,3 +26,27 @@ jobs:
       - name: Test
         if: hashFiles('package-lock.json') != ''
         run: npm test
+
+  skills:
+    # Installs the bundled skills from this checkout into a throwaway HOME, the same path `npx skills add` takes from GitHub.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check skill versions (quoted SemVer metadata.version)
+        run: node scripts/check-skill-versions.mjs skills
+      - name: Install the skills with npx skills
+        run: |
+          set -euo pipefail
+          export HOME="$(mktemp -d)" CI=true
+          npx -y skills add "$GITHUB_WORKSPACE" -g -y -a claude-code -a codex --json > "$RUNNER_TEMP/install.json"
+          cat "$RUNNER_TEMP/install.json"
+          jq -e 'length > 0 and all(.[]; .status == "installed")' "$RUNNER_TEMP/install.json"
+          for skill in "$GITHUB_WORKSPACE"/skills/*/; do
+            name="$(basename "$skill")"
+            jq -e --arg name "$name" 'any(.[]; .name == $name and .status == "installed")' "$RUNNER_TEMP/install.json"
+            test -f "$HOME/.agents/skills/$name/SKILL.md"
+            test -f "$HOME/.claude/skills/$name/SKILL.md"
+          done

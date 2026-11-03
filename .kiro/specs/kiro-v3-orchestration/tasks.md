@@ -437,7 +437,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - Tests: `test/transcript.test.ts` and smoke cases for streaming a session loaded from the store (replay first), idempotent cursor reads, a cancelled turn, a closed session, the resource read, and a subscribed client receiving `notifications/resources/updated` within 1 s
   - _Requirements: 26.1, 26.2, 26.3, 26.4, 26.5, 26.6, 26.7_
 
-- [ ] 19. Bundled agent skills and CI install job
+- [x] 19. Bundled agent skills and CI install job
   - `skills/kiro-orchestration/SKILL.md` with `name`, `description`, and `metadata` (`author: Soham Patwardhan`, `version: "1.0.0"`), plus `references/` for the tool cheat sheet and recovery playbook. Covers delegating a task, choosing mode, model, effort, and permissions (including the `KIRO_MCP_ALLOW_SHELL` opt-in), following a run with `kiro_stream_session` or the transcript resource, collecting results and patches, and recovery
   - `scripts/check-skill-versions.mjs` copied from `KaTeX-Agent-Skill`
   - Extend `.github/workflows/ci.yml` with a `skills` job: the version check, then `npx -y skills add "$GITHUB_WORKSPACE" -g -y -a claude-code -a codex --json` with a throwaway `HOME` and `CI=true`, a `jq` check that every entry is `installed`, and a loop that checks each `skills/*/SKILL.md` exists under `$HOME/.agents/skills/`
