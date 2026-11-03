@@ -267,7 +267,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - Tests: smoke cases for each tool, including `CONFIRMATION_REQUIRED` and `PATH_EXISTS`
   - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7_
 
-- [ ] 6.4 Configure and state snapshots
+- [x] 6.4 Configure and state snapshots
   - `kiro_session_configure`:
     - checks `mode`, `model`, `effort` (`effortLevel`), and `options` against the latest advertised modes and config options, then calls `session/set_mode` or `session/set_config_option`;
     - `VALUE_NOT_ADVERTISED` lists the allowed values;

@@ -20,6 +20,7 @@
 //   FAKE_KIRO_WORKFLOWS_OFF workflow methods answer success false
 //   FAKE_KIRO_HEADLESS_EXIT headless exit code (0, 3, 4) or "hang" or "interrupt"
 //   FAKE_KIRO_PENDING_ON_LOAD session/load is followed by a waiting permission request
+//   FAKE_KIRO_NO_GOVERNANCE  no _kiro/governance/state snapshot is sent
 //
 // Prompt markers select a scripted turn: [permission:shell], [permission:write],
 // [long:<ms>], [ratelimit], [fallback], [crash], [garbage], [unknown], [plan],
@@ -313,7 +314,7 @@ function acp() {
     });
     notify("_kiro/progressive_context/items_changed", { sessionId, status: "success", items: [{ name: "code-review", type: "skill", description: "Review a diff", scope: "global", uri: "file:///home/dev/.kiro/skills/code-review/SKILL.md" }] });
     notify("_kiro/powers/items_changed", { sessionId, status: "success", powers: [{ name: "context7", displayName: "Context7", description: "Docs", mcpServerNames: ["context7"] }] });
-    notify("_kiro/governance/state", { sessionId, isEnterprise: false, features: { mcpEnabled: true, webToolsEnabled: true, autonomousAgents: true } });
+    if (!env.FAKE_KIRO_NO_GOVERNANCE) notify("_kiro/governance/state", { sessionId, isEnterprise: false, features: { mcpEnabled: true, webToolsEnabled: true, autonomousAgents: true } });
     notify("_kiro/customAgent/config_error", { sessionId, path: "/home/dev/.kiro/agents/broken.json", reasonCode: "invalid_config", error: "PromptFileError: bad prompt" });
     info(sessionId, { kind: "context_usage", usagePercentage: s(sessionId).context, summarizationThreshold: 80, contextUsage: { usagePercentage: s(sessionId).context, summarizationThreshold: 80 }, breakdown: { contextFiles: { tokens: 10, percent: 0.1 }, tools: { tokens: 2000, percent: 1 }, memory: { tokens: 0, percent: 0 }, kiroResponses: { tokens: 0, percent: 0 }, yourPrompts: { tokens: 0, percent: 0 }, sessionFiles: { tokens: 0, percent: 0 } } });
   }
