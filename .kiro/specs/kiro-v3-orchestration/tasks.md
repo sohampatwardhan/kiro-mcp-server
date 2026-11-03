@@ -355,7 +355,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - Tests: the tasks parse cases in `test/parse.test.ts` and a smoke case against a temp spec folder
   - _Requirements: 14.2, 14.3, 14.4_
 
-- [ ] 12. Kiro extensions
+- [x] 12. Kiro extensions
   - `src/tools/extensions.ts`:
     - `kiro_session_compact` (`_kiro/session/compact`; `TURN_ACTIVE` while a turn runs);
     - `kiro_memory`: list, get, create, update, delete (with `confirm`), and `sync_status` from the cached `_kiro/memory/syncStatus`;
