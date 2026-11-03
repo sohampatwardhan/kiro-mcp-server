@@ -147,3 +147,58 @@ export function assertAcp(argv: string[]): void {
     if (ACP_FORBIDDEN.test(arg)) throw new ArgvError(`${arg} must not be passed to kiro-cli acp --agent-engine=v3`);
   }
 }
+
+// ---- headless ----------------------------------------------------------------
+
+export const TRUST_TOOL_PATTERN = /^[A-Za-z0-9_][A-Za-z0-9_:.-]{0,127}$/;
+
+export interface HeadlessOptions {
+  agent?: string;
+  model?: string;
+  effort?: string;
+  mode?: "default" | "spec";
+  resumeId?: string;
+  cloud?: boolean;
+  repos?: string[];
+  requireMcpStartup?: boolean;
+  requireSandbox?: boolean;
+  trustAllTools?: boolean;
+  trustTools?: string[];
+  trustWorkspace?: boolean;
+}
+
+/** Fixed-order argv for a headless run. The prompt goes on stdin, never here (Requirement 22.1). */
+export function headlessArgv(o: HeadlessOptions): string[] {
+  const argv = ["chat", "--v3", "--no-interactive", "--output-format=stream-json", "--wrap=never"];
+  if (o.agent !== undefined) argv.push(`--agent=${check(o.agent, NAME_PATTERN, "agent")}`);
+  if (o.model !== undefined) argv.push(`--model=${check(o.model, NAME_PATTERN, "model")}`);
+  if (o.effort !== undefined) argv.push(`--effort=${check(o.effort, NAME_PATTERN, "effort")}`);
+  if (o.mode !== undefined) argv.push(`--mode=${o.mode}`);
+  if (o.resumeId !== undefined) argv.push(`--resume-id=${check(o.resumeId, /^[A-Za-z0-9_-]{1,128}$/, "session id")}`);
+  if (o.cloud === true) argv.push("--cloud");
+  if (o.repos !== undefined && o.repos.length > 0) {
+    for (const repo of o.repos) check(repo, /^[A-Za-z0-9][A-Za-z0-9_.-]*(?:\/[A-Za-z0-9_.][A-Za-z0-9_.-]*)?$/, "repo");
+    argv.push(`--repo=${o.repos.join(",")}`);
+  }
+  if (o.requireMcpStartup === true) argv.push("--require-mcp-startup");
+  if (o.requireSandbox === true) argv.push("--sandbox");
+  if (o.trustAllTools === true) argv.push("--trust-all-tools");
+  else if (o.trustTools !== undefined) {
+    for (const tool of o.trustTools) check(tool, TRUST_TOOL_PATTERN, "tool id");
+    argv.push(`--trust-tools=${o.trustTools.join(",")}`);
+  }
+  if (o.trustWorkspace === true) argv.push("--trust-workspace");
+  assertHeadless(argv);
+  return argv;
+}
+
+const HEADLESS_ALLOWED =
+  /^--(?:v3|no-interactive|output-format=stream-json|wrap=never|agent=.+|model=.+|effort=.+|mode=(?:default|spec)|resume-id=.+|cloud|repo=.+|require-mcp-startup|sandbox|trust-all-tools|trust-tools=.*|trust-workspace)$/;
+
+/** Refuses a positional prompt and any flag outside the fixed set. */
+export function assertHeadless(argv: string[]): void {
+  if (argv[0] !== "chat") throw new ArgvError("headless argv must start with chat");
+  for (const arg of argv.slice(1)) {
+    if (!HEADLESS_ALLOWED.test(arg)) throw new ArgvError(`${JSON.stringify(arg)} is not an allowed headless argument`);
+  }
+}

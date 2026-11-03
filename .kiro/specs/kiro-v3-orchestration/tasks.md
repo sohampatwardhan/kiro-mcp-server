@@ -367,7 +367,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - Tests: smoke cases for each tool against the fake, including refused, unsupported, and a confirm-required delete
   - _Requirements: 17.2, 17.3, 18.1, 18.2, 18.3, 18.4, 19.1, 19.2, 19.3, 19.4, 20.1, 20.2, 20.3, 20.4, 20.5, 21.3_
 
-- [ ] 13. Headless jobs
+- [x] 13. Headless jobs
   - `src/argv.ts`:
     - `headlessArgv()` builds the fixed order from the design;
     - `assertHeadless()` refuses a positional prompt;
