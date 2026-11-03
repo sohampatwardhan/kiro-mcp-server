@@ -336,7 +336,10 @@ export class SessionRegistry extends EventEmitter {
     }
     this.applyState(session, state);
     if (session.suppressReplay) events = events.filter((e) => e.event.type !== "message" && e.event.type !== "thought" && e.event.type !== "user_message" && e.event.type !== "tool_call");
-    for (const { event, key } of events) session.feed.append(event, key);
+    for (const { event, key } of events) {
+      if (event.type === "user_message") session.pendingPreview = event.text;
+      session.feed.append(event, key);
+    }
     this.observer?.onEvents(session, events, state);
   }
 

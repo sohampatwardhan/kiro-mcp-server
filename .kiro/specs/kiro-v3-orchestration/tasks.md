@@ -237,7 +237,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - Tests: `test/events.test.ts`, with fixtures copied from the probe shapes
   - _Requirements: 10.1, 10.2, 10.3, 10.5, 10.7, 10.8_
 
-- [ ] 6. Sessions
+- [x] 6. Sessions
 - [x] 6.1 Session registry and kiro_session_new
   - `src/sessions.ts`: `SessionRegistry` and `AttachedSession` (modes, config options, commands, snapshots, feed, user message refs). It routes notifications by `sessionId`. `detachAll` runs on `hostExited`. `ensureAttached()` re-attaches with `session/load` (resending `cwd` and `additionalDirectories`) when `hostGeneration` is stale, and never resends a prompt
   - `src/tools/sessions.ts` `kiro_session_new`:
@@ -283,7 +283,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - Tests: smoke cases for Spec, Plan, and Autonomous mode switches, an invalid value, and every snapshot kind
   - _Requirements: 13.1, 13.2, 13.3, 13.4, 13.5, 13.6, 14.1, 15.1, 15.2, 15.3, 15.4, 15.5, 17.1, 17.4_
 
-- [ ] 6.5 History and fork
+- [x] 6.5 History and fork
   - Record `user_message_id_assigned` refs with the turn index and a preview. `kiro_session_history` pages `_kiro/session/history`, falls back to the feed, and lists rewind points. `kiro_session_fork` calls `session/fork` with an optional `_meta.kiro.messageId` and attaches the new session
   - Tests: smoke cases for history paging and fallback, and fork at a message id
   - _Requirements: 10.10, 16.1, 16.2_
