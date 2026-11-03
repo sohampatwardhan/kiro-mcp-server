@@ -145,7 +145,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
 
 ## Tasks
 
-- [ ] 1. Set up CI for build and test
+- [x] 1. Set up CI for build and test
   - Create `.github/workflows/ci.yml` modeled on the sibling repo: on `push` and `pull_request`, `permissions: contents: read`, `ubuntu-latest`, `actions/checkout`, `actions/setup-node` with Node 22 and the npm cache, then `npm ci`, `npm run build`, `npm test`
   - There is no lint script. `npm run build` (strict `tsc`) is the static check, as in the sibling
   - Tests run only against `test/fixtures/fake-kiro.mjs`. The workflow installs no `kiro-cli` and sets no secrets

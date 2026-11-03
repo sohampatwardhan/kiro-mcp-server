@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Tests run only against test/fixtures/fake-kiro.mjs. No kiro-cli is installed and no secrets are set.
+      - name: Install
+        if: hashFiles('package-lock.json') != ''
+        run: npm ci
+      - name: Build (strict tsc is the static check)
+        if: hashFiles('package-lock.json') != ''
+        run: npm run build
+      - name: Test
+        if: hashFiles('package-lock.json') != ''
+        run: npm test
