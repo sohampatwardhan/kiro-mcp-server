@@ -20,7 +20,7 @@ async function main(): Promise<void> {
     // Keep serving: tools that need the CLI return CLI_NOT_FOUND with the same message.
     process.stderr.write(`kiro-mcp-server: warning: ${cliNotFoundMessage(config.kiroBin)}\n`);
   }
-  const server = createServer(config);
+  const { server } = createServer(config);
   await server.connect(new StdioServerTransport());
 }
 

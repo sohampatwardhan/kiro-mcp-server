@@ -238,7 +238,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - _Requirements: 10.1, 10.2, 10.3, 10.5, 10.7, 10.8_
 
 - [ ] 6. Sessions
-- [ ] 6.1 Session registry and kiro_session_new
+- [x] 6.1 Session registry and kiro_session_new
   - `src/sessions.ts`: `SessionRegistry` and `AttachedSession` (modes, config options, commands, snapshots, feed, user message refs). It routes notifications by `sessionId`. `detachAll` runs on `hostExited`. `ensureAttached()` re-attaches with `session/load` (resending `cwd` and `additionalDirectories`) when `hostGeneration` is stale, and never resends a prompt
   - `src/tools/sessions.ts` `kiro_session_new`:
     - checks roots;
