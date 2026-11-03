@@ -288,7 +288,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - Tests: smoke cases for history paging and fallback, and fork at a message id
   - _Requirements: 10.10, 16.1, 16.2_
 
-- [ ] 7. Turns
+- [x] 7. Turns
 - [x] 7.1 Prompt content blocks
   - `src/prompt.ts` `buildPromptBlocks()`:
     - text;
@@ -310,7 +310,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - Tests: smoke cases for prompt-then-poll on a long turn, queueing, `TURN_ACTIVE`, progress notifications, client cancel, and host crash mid-turn
   - _Requirements: 3.2, 9.1, 9.6, 9.7, 10.4, 10.6, 10.9, 11.5_
 
-- [ ] 7.3 Steer and cancel
+- [x] 7.3 Steer and cancel
   - `kiro_steer`: `_session/steer` only during a running turn (otherwise `NO_ACTIVE_TURN`), and records the steering events. `kiro_cancel` for a session: answer pending permissions with the offered `reject_once` option (or cancelled), send `session/cancel`, and wait up to the cancel settle time for the prompt response
   - Tests: smoke cases for steer during a long turn, steer when idle, and cancel with a pending permission
   - _Requirements: 11.1, 11.2, 11.3_

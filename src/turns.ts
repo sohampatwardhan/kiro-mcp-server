@@ -262,6 +262,29 @@ export class TurnManager implements SessionObserver {
     }
   }
 
+  /** Send _session/steer to the running turn (Requirement 11.1, 11.2). */
+  async steer(session: AttachedSession, text: string): Promise<Turn> {
+    const turn = this.active.get(session.sessionId);
+    if (turn === undefined) throw new ToolError("NO_ACTIVE_TURN", "this session has no running turn to steer; send a new prompt instead");
+    await this.host.call("_session/steer", { sessionId: session.sessionId, message: text });
+    return turn;
+  }
+
+  /**
+   * Cancel the running turn: the caller has already answered its pending
+   * permissions; this sends session/cancel and waits for the prompt response
+   * up to `settleMs` (Requirement 11.3). Queued prompts are dropped.
+   */
+  async cancel(session: AttachedSession, settleMs: number = LIMITS.cancelSettleMs): Promise<Turn | undefined> {
+    this.dropQueue(session.sessionId, "cancelled before it was sent");
+    const turn = this.active.get(session.sessionId);
+    if (turn === undefined) return undefined;
+    this.host.notify("session/cancel", { sessionId: session.sessionId });
+    const settled = await this.waitSettled(turn, settleMs);
+    if (!settled) turn.settle("cancelled", { stopReason: "cancelled", error: { code: "TIMEOUT", message: `Kiro did not answer the cancelled prompt within ${settleMs} ms` } });
+    return turn;
+  }
+
   /** Drop queued prompts for a session (close or cancel). */
   dropQueue(sessionId: string, reason: string): void {
     for (const turn of this.queues.get(sessionId) ?? []) turn.settle("cancelled", { stopReason: "cancelled", error: { code: "NO_ACTIVE_TURN", message: reason } });

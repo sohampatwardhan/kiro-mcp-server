@@ -5,7 +5,7 @@ import { createCore, type Core } from "./core.js";
 import { registerConfigureTools } from "./tools/configure.js";
 import { registerHistoryTools } from "./tools/history.js";
 import { registerSessionTools } from "./tools/sessions.js";
-import { registerTurnTools } from "./tools/turns.js";
+import { registerControlTools, registerTurnTools } from "./tools/turns.js";
 
 export const SERVER_NAME = "kiro-mcp-server";
 export const SERVER_VERSION = "0.1.0";
@@ -26,5 +26,10 @@ export function createServer(config: Config): KiroServer {
   registerConfigureTools(server, core);
   registerHistoryTools(server, core);
   registerTurnTools(server, core);
+  registerControlTools(server, core);
+  core.closeHooks.push(async (session) => {
+    core.cancelPermissions(session.sessionId);
+    await core.turns.cancel(session, 5_000);
+  });
   return { server, core };
 }

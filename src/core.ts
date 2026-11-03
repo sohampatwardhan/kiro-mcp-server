@@ -16,6 +16,10 @@ export interface Core {
   jobEvents: (jobId: string, args: Record<string, unknown>, extra: unknown) => Promise<never> | Promise<Record<string, unknown>>;
   /** Pending permissions for a session, as tool output. Replaced by the permission broker. */
   pendingPermissions: (sessionId?: string) => Record<string, unknown>[];
+  /** Answer a session's pending permissions as cancelled (reject_once when offered). Replaced by the broker. */
+  cancelPermissions: (sessionId: string) => void;
+  /** kiro_cancel for a headless job id. Replaced by the job store. */
+  cancelJob: (jobId: string) => Promise<Record<string, unknown>>;
   /** Run before a session closes: cancel its turn, reject its permissions. */
   closeHooks: ((session: AttachedSession) => Promise<void>)[];
 }
@@ -38,6 +42,8 @@ export function createCore(config: Config, version: string): Core {
     turns,
     jobEvents: (jobId) => Promise.reject(new ToolError("JOB_NOT_FOUND", `no headless job ${jobId}`)),
     pendingPermissions: () => [],
+    cancelPermissions: () => undefined,
+    cancelJob: (jobId) => Promise.reject(new ToolError("JOB_NOT_FOUND", `no headless job ${jobId}`)),
     closeHooks: [],
   };
 }

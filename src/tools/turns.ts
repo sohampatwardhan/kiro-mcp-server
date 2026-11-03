@@ -238,6 +238,55 @@ export function registerTurnTools(server: McpServer, core: Core): void {
   );
 }
 
+export function registerControlTools(server: McpServer, core: Core): void {
+  const { sessions, turns } = core;
+
+  defineTool(
+    server,
+    "kiro_steer",
+    {
+      title: "Steer a running Kiro turn",
+      description:
+        "Send a steering message into the session's running turn (_session/steer), like Kiro's steer mode: Kiro queues it and injects it at the next step " +
+        "(watch for steering events in kiro_events). Fails with NO_ACTIVE_TURN when nothing is running; send a new kiro_prompt instead.",
+      input: z.object({ session_id: sessionId, text: z.string().min(1).max(LIMITS.maxTextChars) }).strict(),
+      output: z.object({ accepted: z.boolean(), turn_id: z.string(), cursor: z.number() }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    },
+    async (args) => {
+      const session = sessions.require(args.session_id);
+      const turn = await turns.steer(session, args.text);
+      return { accepted: true, turn_id: turn.turnId, cursor: session.feed.latestSeq };
+    },
+  );
+
+  defineTool(
+    server,
+    "kiro_cancel",
+    {
+      title: "Cancel a Kiro turn or headless job",
+      description:
+        "Cancel a session's running turn (like Ctrl+C): pending permissions are answered with the offered reject option, session/cancel is sent, and the call " +
+        "waits up to 30 s for Kiro's prompt response before returning the settled turn. Queued prompts are dropped. With job_id, stops a headless run's " +
+        "process group (SIGTERM, then SIGKILL 5 s later). The session stays open.",
+      input: z
+        .object({ session_id: sessionId.optional(), job_id: z.string().regex(/^job_[0-9a-f]{24}$/).optional() })
+        .strict()
+        .refine((v) => (v.session_id === undefined) !== (v.job_id === undefined), { message: "pass exactly one of session_id or job_id" }),
+      output: z.object({ session_id: z.string().nullable(), job_id: z.string().nullable(), status: z.string(), turn: turnShape.nullable(), job: json }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    async (args) => {
+      if (args.job_id !== undefined) return (await core.cancelJob(args.job_id)) as never;
+      const session = sessions.require(args.session_id ?? "");
+      core.cancelPermissions(session.sessionId);
+      const turn = await turns.cancel(session);
+      if (turn === undefined) return { session_id: session.sessionId, job_id: null, status: "idle", turn: null, job: null };
+      return { session_id: session.sessionId, job_id: null, status: turn.status, turn: turnView(turn), job: null };
+    },
+  );
+}
+
 /** An attached or recently closed session whose feed can be read. */
 export function sessionFeedOwner(core: Core, id: string): AttachedSession {
   const session = core.sessions.get(id);
