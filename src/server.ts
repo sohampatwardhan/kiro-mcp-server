@@ -5,6 +5,7 @@ import { createCore, type Core } from "./core.js";
 import { registerConfigureTools } from "./tools/configure.js";
 import { registerHistoryTools } from "./tools/history.js";
 import { registerSessionTools } from "./tools/sessions.js";
+import { registerTurnTools } from "./tools/turns.js";
 
 export const SERVER_NAME = "kiro-mcp-server";
 export const SERVER_VERSION = "0.1.0";
@@ -24,5 +25,6 @@ export function createServer(config: Config): KiroServer {
   registerSessionTools(server, core);
   registerConfigureTools(server, core);
   registerHistoryTools(server, core);
+  registerTurnTools(server, core);
   return { server, core };
 }

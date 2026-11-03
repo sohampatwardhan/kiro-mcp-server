@@ -299,7 +299,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - Tests: `test/prompt.test.ts`
   - _Requirements: 9.2, 9.3, 9.4, 9.5, 9.8_
 
-- [ ] 7.2 Turn manager, kiro_prompt, and kiro_events
+- [x] 7.2 Turn manager, kiro_prompt, and kiro_events
   - `src/turns.ts` `TurnManager`:
     - starts `session/prompt` and holds the turn;
     - settles only from the prompt response, with stop reason, final text, tool-call summary, credits from `turn_completion`, and elapsed time;
