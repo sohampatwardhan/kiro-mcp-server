@@ -395,7 +395,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - Tests: parse cases and smoke cases for each read, each write gated off and on, and the withheld cases
   - _Requirements: 23.1, 23.2, 23.3, 23.4, 23.5, 23.6, 23.7, 23.8, 23.9_
 
-- [ ] 15. Shutdown, server instructions, and full smoke suite
+- [x] 15. Shutdown, server instructions, and full smoke suite
   - `src/index.ts`: on stdin close, SIGINT, SIGTERM, or SIGHUP, cancel running turns, close the host's stdin, run `stopAll`, and exit
   - `SERVER_INSTRUCTIONS` in `src/server.ts` with the content listed in the design. That includes composing `/spec run`, `/goal`, `/clear`, and `/spawn`, and the impossible features with their reasons
   - Assert in `test/smoke.test.ts` that:

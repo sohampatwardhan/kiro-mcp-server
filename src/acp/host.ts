@@ -168,8 +168,9 @@ export class AcpHost extends EventEmitter {
     });
     peer.onClose((reason) => {
       onDown(reason);
-      // stdout closed while the process lives on: stop it so it does not linger.
-      if (child.exitCode === null && child.signalCode === null) killGroup(child, "SIGTERM");
+      // stdout closed while the process lives on: stop it so it does not linger. During
+      // stop() the host gets to drain its stdin (a final session/cancel) and exit on its own.
+      if (this.state !== "stopping" && child.exitCode === null && child.signalCode === null) killGroup(child, "SIGTERM");
     });
 
     try {
@@ -257,8 +258,6 @@ export class AcpHost extends EventEmitter {
       return;
     }
     this.state = "stopping";
-    this.generation++;
-    this.peer?.close("server stopping");
     const exited = new Promise<void>((resolve) => {
       if (child.exitCode !== null || child.signalCode !== null) resolve();
       else child.once("exit", () => resolve());
@@ -273,6 +272,8 @@ export class AcpHost extends EventEmitter {
     await exited;
     clearTimeout(timer);
     clearTimeout(killTimer);
+    this.generation++;
+    this.peer?.close("server stopping");
     this.child = null;
     this.peer = null;
     this.state = "stopped";
