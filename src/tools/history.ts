@@ -125,10 +125,14 @@ export async function forkSession(core: Core, parentId: string, messageId?: stri
   })) as Record<string, unknown> | null;
   const id = typeof result?.sessionId === "string" ? result.sessionId : null;
   if (id === null) throw new ToolError("OUTPUT_PARSE_FAILED", "session/fork returned no sessionId");
-  return core.sessions.attach(id, result ?? {}, {
+  const fork = core.sessions.attach(id, result ?? {}, {
     cwd: parent.cwd,
     additionalDirectories: parent.additionalDirectories,
     source: parent.source,
     executionTarget: parent.executionTarget,
   });
+  // The fork carries the parent's conversation up to the fork point, so it inherits its rewind points.
+  const cut = messageId === undefined ? parent.userMessages.length : parent.userMessages.findIndex((m) => m.messageId === messageId);
+  if (fork.userMessages.length === 0) fork.userMessages.push(...parent.userMessages.slice(0, cut === -1 ? parent.userMessages.length : cut));
+  return fork;
 }

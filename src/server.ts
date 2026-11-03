@@ -4,6 +4,7 @@ import type { Config } from "./config.js";
 import type { RequestPermissionParams } from "./acp/types.js";
 import { createCore, type Core } from "./core.js";
 import { PermissionBroker, permissionView, type ElicitParams, type ElicitResult } from "./permissions.js";
+import { registerBranchingTools } from "./tools/branching.js";
 import { registerConfigureTools } from "./tools/configure.js";
 import { registerHistoryTools } from "./tools/history.js";
 import { registerPermissionTools } from "./tools/permissions.js";
@@ -34,6 +35,7 @@ export function createServer(config: Config): KiroServer {
   registerTurnTools(server, core);
   registerControlTools(server, core);
   registerPermissionTools(server, core, broker);
+  registerBranchingTools(server, core);
   core.closeHooks.push(async (session) => {
     core.cancelPermissions(session.sessionId);
     await core.turns.cancel(session, 5_000);

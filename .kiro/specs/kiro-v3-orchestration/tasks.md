@@ -337,7 +337,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - Tests: `test/parse.test.ts`, `test/trust.test.ts`, and smoke cases for signed in, signed out, diagnostics, usage, unsupported usage, and an untrusted root (fake `HOME`)
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 3.1, 3.3, 3.4_
 
-- [ ] 10. Tangent
+- [x] 10. Tangent
   - `src/tangent.ts` `TangentTree` and `src/tools/branching.ts` `kiro_tangent`:
     - `branch` forks at the latest message and names the fork, or uses `tangent-N`. A session with no messages gives `NOTHING_TO_BRANCH`;
     - `tree` returns the recorded tree;
