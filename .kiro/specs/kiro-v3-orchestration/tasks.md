@@ -166,7 +166,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - Tests: `test/argv-config.test.ts` config cases (invalid values, booleans, defaults)
   - _Requirements: 1.1, 1.2, 25.1, 25.2, 25.3_
 
-- [ ] 2.2 Workspace roots
+- [x] 2.2 Workspace roots
   - `src/paths.ts`: `Roots.fromConfig()` (real paths, `/` refused, must be directories) and `resolveInside(path)` with `realpath` and a separator-aware prefix check. It throws `PATH_OUTSIDE_ROOTS`
   - Tests: `test/paths.test.ts`, covering symlinks into and out of a root, a sibling that shares a name prefix, a missing path, and `/tmp` vs `/private/tmp` on macOS
   - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
