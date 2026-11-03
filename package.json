@@ -1,0 +1,54 @@
+{
+  "name": "@sohampatwardhan/kiro-mcp-server",
+  "version": "0.1.0",
+  "description": "MCP server that lets AI agents (Grok Bot, Claude, Cursor, Codex, and other MCP clients) orchestrate Kiro CLI V3 sessions through typed tools. Requires kiro-cli installed and signed in (run `kiro-cli login`).",
+  "license": "MIT",
+  "author": "Soham Patwardhan",
+  "homepage": "https://github.com/sohampatwardhan/kiro-mcp-server",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sohampatwardhan/kiro-mcp-server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sohampatwardhan/kiro-mcp-server/issues"
+  },
+  "type": "module",
+  "bin": {
+    "kiro-mcp-server": "dist/src/index.js"
+  },
+  "main": "./dist/src/server.js",
+  "files": [
+    "dist/src",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node -e \"require('node:fs').chmodSync('dist/src/index.js', 0o755)\"",
+    "prepack": "npm run build",
+    "start": "node dist/src/index.js",
+    "test": "npm run build && node --test --test-concurrency=4 dist/test/*.test.js"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "kiro",
+    "kiro-cli",
+    "acp",
+    "agent-client-protocol",
+    "orchestration"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "typescript": "^5.9.3"
+  }
+}
