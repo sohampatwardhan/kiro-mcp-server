@@ -137,7 +137,7 @@ When the MCP client declares form elicitation, a request waiting under `ask` is 
 - `checked_at` and `cached`: a reading is reused for 60 s, and concurrent calls share one request. Pass `refresh: true` for a new reading;
 - `stop_percent` and `blocked_by`: the operator's threshold, and the reason new work would be refused (`null` when nothing blocks).
 
-With `KIRO_MCP_USAGE_STOP_PERCENT` set, `kiro_prompt`, `kiro_tangent` `merge`, `kiro_workflow` `invoke`, and `kiro_run_headless` check usage first. At or above the threshold they fail with `USAGE_LIMIT_NEAR`, naming the percent used, the credits left, and the reset date, and nothing is sent to Kiro. `kiro_steer`, `kiro_cancel`, and `kiro_session_compact` are not checked. If usage cannot be read, work goes ahead: this is a budget guard, not a security control.
+With `KIRO_MCP_USAGE_STOP_PERCENT` set, `kiro_prompt`, `kiro_tangent` `merge`, `kiro_workflow` `invoke`, and `kiro_run_headless` check usage first. At or above the threshold they fail with `USAGE_LIMIT_NEAR`, naming the percent used, the credits left, and the reset date, and nothing is sent to Kiro. `kiro_steer`, `kiro_cancel`, and `kiro_session_compact` are not checked. A prompt sent with `when_busy: "queue"` is checked when it is queued, not when it starts. The check reads usage through the ACP host, so it starts the host if needed, even before a headless run. If usage cannot be read within 10 s, work goes ahead and the check is skipped for the next 30 s: this is a budget guard, not a security control.
 
 ## Typical flow
 

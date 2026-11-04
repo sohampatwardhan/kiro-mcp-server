@@ -64,6 +64,8 @@ export const LIMITS = {
   maxClosedSessions: 50,
   cliOutputBytes: 4 * 1024 * 1024,
   usageCacheMs: 60_000,
+  usageGuardTimeoutMs: 10_000,
+  usageGuardFailureMs: 30_000,
 } as const;
 
 export class ConfigError extends Error {

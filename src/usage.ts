@@ -65,7 +65,8 @@ export function normalizeUsage(result: unknown): Usage {
     const total = num(x.total) ?? num(x.limit);
     if (used !== null && total !== null) pools.push([used, total]);
   }
-  const used = pools.reduce((sum, [u]) => sum + u, 0);
+  // Overdrawn pools (overages) count as fully used, so percent_used and remaining_total agree.
+  const used = pools.reduce((sum, [u, l]) => sum + Math.min(u, l), 0);
   const limit = pools.reduce((sum, [, l]) => sum + l, 0);
   return {
     plan: str(data.planName),
@@ -83,12 +84,16 @@ export interface UsageReaderOptions {
   /** `KIRO_MCP_USAGE_STOP_PERCENT`, or null when unset. */
   stopPercent: number | null;
   now?: () => number;
+  /** How long the guard waits for a reading before letting work go ahead. */
+  guardTimeoutMs?: number;
 }
 
 /** Cached, shared reads of the plan's usage, and the guard on new work (Requirement 3.5, 3.6). */
 export class UsageReader {
   private cache: { usage: Usage; at: number } | null = null;
   private inflight: Promise<{ usage: Usage; at: number }> | null = null;
+  /** Until this time the guard skips reading after a failure, so unreadable usage costs one wait, not one per call. */
+  private guardSkipUntil = 0;
   private readonly now: () => number;
 
   constructor(
@@ -105,14 +110,26 @@ export class UsageReader {
     return this.reading(await this.fetchShared(), false);
   }
 
-  /** Throw USAGE_LIMIT_NEAR when the threshold is reached. An unreadable usage lets work go ahead. */
+  /**
+   * Throw USAGE_LIMIT_NEAR when the threshold is reached. Usage that cannot be
+   * read within the guard timeout lets work go ahead, and the guard then skips
+   * reading for the failure window. `kiro_usage` calls still retry at once.
+   */
   async guard(): Promise<void> {
-    if (this.opts.stopPercent === null) return;
+    if (this.opts.stopPercent === null || this.now() < this.guardSkipUntil) return;
     let reading: UsageReading;
+    let timer: NodeJS.Timeout | undefined;
     try {
-      reading = await this.read();
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("usage read timed out")), this.opts.guardTimeoutMs ?? LIMITS.usageGuardTimeoutMs);
+        timer.unref();
+      });
+      reading = await Promise.race([this.read(), timeout]);
     } catch {
+      this.guardSkipUntil = this.now() + LIMITS.usageGuardFailureMs;
       return;
+    } finally {
+      clearTimeout(timer);
     }
     if (reading.blocked_by !== null) {
       throw new ToolError("USAGE_LIMIT_NEAR", reading.blocked_by, {

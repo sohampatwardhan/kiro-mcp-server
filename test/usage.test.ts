@@ -48,6 +48,12 @@ describe("normalizeUsage", () => {
     assert.equal(u.percent_used, 100);
   });
 
+  it("counts an overdrawn pool as fully used so the totals agree", () => {
+    const u = normalizeUsage(payload({ usageBreakdowns: [{ resourceType: "CREDIT", used: 60, limit: 50 }], bonusCredits: [{ name: "b", used: 0, total: 100 }] }));
+    assert.equal(u.remaining_total, 100);
+    assert.equal(u.percent_used, 33.33);
+  });
+
   it("reports null totals when no pool carries numbers", () => {
     const u = normalizeUsage({ data: { planName: "X" } });
     assert.equal(u.remaining_total, null);
@@ -60,7 +66,7 @@ describe("normalizeUsage", () => {
   });
 });
 
-function reader(stopPercent: number | null, answers: (() => Promise<unknown>)[]) {
+function reader(stopPercent: number | null, answers: (() => Promise<unknown>)[], guardTimeoutMs?: number) {
   let clock = 1_000_000;
   let calls = 0;
   const r = new UsageReader(
@@ -69,7 +75,7 @@ function reader(stopPercent: number | null, answers: (() => Promise<unknown>)[])
       const next = answers.shift();
       return next ? next() : Promise.resolve(payload());
     },
-    { stopPercent, now: () => clock },
+    { stopPercent, now: () => clock, ...(guardTimeoutMs !== undefined ? { guardTimeoutMs } : {}) },
   );
   return { r, calls: () => calls, advance: (ms: number) => (clock += ms) };
 }
@@ -137,5 +143,27 @@ describe("UsageReader", () => {
     assert.equal(unset.calls(), 0, "no reading without a threshold");
     await reader(10, [() => Promise.reject(new ToolError("UNSUPPORTED_BY_KIRO", "no"))]).r.guard();
     await reader(10, [() => Promise.resolve({ success: false })]).r.guard();
+  });
+
+  it("guard gives up on a slow reading, then skips reading for the failure window", async () => {
+    // A slow read that the host's own request timeout ends later.
+    const slow = () => new Promise((_, reject) => setTimeout(() => reject(new Error("request timed out")), 80));
+    const t = reader(10, [slow], 20);
+    const started = Date.now();
+    await t.r.guard();
+    assert.ok(Date.now() - started < 70, "the guard did not wait for the slow read");
+    await t.r.guard();
+    assert.equal(t.calls(), 1, "no second read inside the failure window");
+    await new Promise((r) => setTimeout(r, 100));
+    t.advance(30_001);
+    await assert.rejects(t.r.guard(), (e: unknown) => e instanceof ToolError && e.code === "USAGE_LIMIT_NEAR");
+    assert.equal(t.calls(), 2);
+  });
+
+  it("an explicit read still retries inside the guard's failure window", async () => {
+    const t = reader(10, [() => Promise.reject(new Error("down"))]);
+    await t.r.guard();
+    assert.equal((await t.r.read()).cached, false);
+    assert.equal(t.calls(), 2);
   });
 });

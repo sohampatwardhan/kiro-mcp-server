@@ -190,7 +190,9 @@ describe("KIRO_MCP_USAGE_STOP_PERCENT", () => {
       assert.match(err.message, /2026-12-01/);
       assert.equal(err.details.stop_percent, 90);
       assert.equal((await c.fail("kiro_run_headless", { cwd: c.work, prompt: "hello" })).code, "USAGE_LIMIT_NEAR");
+      assert.equal((await c.fail("kiro_workflow", { action: "invoke", session_id: id, recipe: "goal", inputs: { goal: "x" } })).code, "USAGE_LIMIT_NEAR");
       const meta = await c.meta();
+      assert.equal(meta.filter((m) => m.kind === "request" && m.method === "_kiro/workflow/invoke").length, 0);
       assert.equal(meta.filter((m) => m.kind === "request" && m.method === "session/prompt").length, 0);
       assert.equal(meta.filter((m) => m.kind === "start" && (m.argv as string[])[0] === "chat").length, 0);
     } finally {
