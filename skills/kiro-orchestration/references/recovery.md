@@ -11,6 +11,7 @@
 | `QUEUE_FULL` | Five prompts already wait | Wait for the queue to drain |
 | `VALUE_NOT_ADVERTISED` | Mode, option, command, or recipe input is not offered | Pick from `details.allowed` or `details.closest` |
 | Tool call `failure_reason: "denied"` with `policy: "shell_disabled"` | Shell approvals are off | Tell the user the task needs `KIRO_MCP_ALLOW_SHELL=1`, or ask Kiro to proceed without running commands |
+| Every request rejected at once with `policy: "elicitation"`, though nobody answered | The MCP client declines approval forms without showing them | Tell the user to set `KIRO_MCP_ELICITATION=off` so requests wait for `kiro_permission_respond` |
 | `policy: "timeout"` | Nobody answered a permission in time | Answer faster; poll `kiro_permissions` while a turn runs |
 | `PATH_OUTSIDE_ROOTS` | A path is outside `KIRO_MCP_ROOTS` | Use a path inside the roots from `kiro_status` |
 | `gap: true` in events | Older events were dropped from the bounded feed | Continue from `lowest_cursor`; use `kiro_session_history` for the full transcript |

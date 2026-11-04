@@ -455,7 +455,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - Tests: the CI job itself, run locally once with the same commands before pushing
   - _Requirements: 27.1, 27.2, 27.3, 27.4, 27.5_
 
-- [ ] 20. Elicitation opt-out
+- [x] 20. Elicitation opt-out
   - `src/config.ts`: `KIRO_MCP_ELICITATION` parsed with `parseEnum` (`on`, `off`; default `on`) into `Config.elicitation`. Invalid values exit with code 2
   - `src/permissions.ts`: `handle()` skips `elicit()` when `elicitation` is `off`. With forms on, accept, decline, and cancel keep their 12.11 behavior
   - `kiro_status`: `policy.elicitation` and `policy.client_form_elicitation` (whether the connected client declared form elicitation)

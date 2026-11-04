@@ -172,8 +172,8 @@ describe("operator policies", () => {
 });
 
 describe("elicitation", () => {
-  async function withElicit(answer: { action: string; content?: Record<string, unknown> }) {
-    const c = await connect({ capabilities: { elicitation: { form: {} } } });
+  async function withElicit(answer: { action: string; content?: Record<string, unknown> }, env: Record<string, string> = {}) {
+    const c = await connect({ capabilities: { elicitation: { form: {} } }, env });
     const asked: unknown[] = [];
     c.client.setRequestHandler(ElicitRequestSchema, async (req) => {
       asked.push(req.params);
@@ -198,6 +198,27 @@ describe("elicitation", () => {
     try {
       const p = await c.ok<PromptResult>("kiro_prompt", { session_id: await session(c), text: "[permission:write] edit" });
       assert.match(p.turn.final_text ?? "", /selected:reject\]/);
+    } finally {
+      await c.close();
+    }
+  });
+
+  it("KIRO_MCP_ELICITATION=off sends no form to a client that declines every form", async () => {
+    const { c, asked } = await withElicit({ action: "decline" }, { KIRO_MCP_ELICITATION: "off", KIRO_MCP_ALLOW_SHELL: "1" });
+    try {
+      const status = await c.ok<{ policy: { elicitation: string; client_form_elicitation: boolean } }>("kiro_status", {});
+      assert.equal(status.policy.elicitation, "off");
+      assert.equal(status.policy.client_form_elicitation, true);
+      const id = await session(c);
+      const p = await c.ok<PromptResult>("kiro_prompt", { session_id: id, text: "[permission:shell] run", wait_s: 0.5 });
+      assert.equal(p.status, "waiting_permission");
+      const [pending] = p.pending_permissions;
+      assert.ok(pending);
+      await c.ok("kiro_permission_respond", { permission_id: pending.permission_id, option_id: "accept" });
+      const done = await finish(c, id);
+      assert.equal(done.status, "completed");
+      assert.match(done.turn?.final_text ?? "", /selected:accept\]/);
+      assert.equal(asked.length, 0);
     } finally {
       await c.close();
     }

@@ -94,6 +94,7 @@ All are optional. An invalid value makes the server print the variable name and 
 | `KIRO_MCP_PERMISSION_TIMEOUT_MS` | `600000` | Unanswered permissions are rejected after this long |
 | `KIRO_MCP_ALLOW_SHELL` | off | Lets shell-command requests be approved. Off: they are rejected at once |
 | `KIRO_MCP_ALLOW_PERSISTENT_CONSENT` | off | Allows `allow_always` answers |
+| `KIRO_MCP_ELICITATION` | `on` | `on` also shows pending permissions to the client's user as MCP forms; `off` never sends forms, so every request waits for `kiro_permission_respond` |
 | `KIRO_MCP_HEADLESS_TRUST` | `none` | `tools` allows headless `trust_tools`; `all` also allows `trust_all_tools` |
 | `KIRO_MCP_ALLOW_TRUST_WORKSPACE` | off | Allows headless `trust_workspace` |
 | `KIRO_MCP_ALLOW_CONFIG_WRITES` | off | Allows agent, MCP config, settings, and powers writes |
@@ -111,12 +112,16 @@ ACP has no method for trusting a workspace. Until a folder is trusted, Kiro does
 
 Shell approvals are off by default, as in `claude-code-mcp-server`: Kiro's requests to run commands (including tests and builds) are rejected at once and recorded as `policy: "shell_disabled"`. To let the calling agent approve them one at a time, set `KIRO_MCP_ALLOW_SHELL=1`. To approve every non-shell request automatically as well, add `KIRO_MCP_PERMISSIONS=allow`.
 
+### Approval forms (elicitation)
+
+When the MCP client declares form elicitation, a request waiting under `ask` is also shown to the client's user as a form listing the options the server would accept. Choosing one answers the request, declining the form rejects it, and dismissing it leaves it pending. Some clients declare form elicitation but decline every form without showing it to anyone, so every request is rejected within milliseconds, before the calling agent can answer (`policy: "elicitation"`). For those clients set `KIRO_MCP_ELICITATION=off`: no forms are sent, and requests wait for `kiro_permission_respond` as usual. `kiro_status` reports the setting as `policy.elicitation` and whether the client declared forms as `policy.client_form_elicitation`.
+
 ## Typical flow
 
 1. `kiro_status` checks the CLI, sign-in, V3 engine, trust, and policy.
 2. `kiro_session_new` (or `kiro_session_load`) attaches a session; `kiro_session_configure` picks mode (`vibe`, `plan`, `spec`, `quick-spec`, `bug-fix`, `autonomous`, or a custom agent), model, and effort.
 3. `kiro_prompt` sends a prompt and waits up to `wait_s`. If the turn is still running, poll `kiro_events` (or `kiro_stream_session`) with the returned cursor until the status is `completed`, `cancelled`, or `failed`.
-4. Answer `pending_permissions` with `kiro_permission_respond`. When the client supports MCP elicitation, the request is also shown to its user.
+4. Answer `pending_permissions` with `kiro_permission_respond`. When the client supports MCP elicitation, the request is also shown to its user (see [Approval forms](#approval-forms-elicitation)).
 5. Steer with `kiro_steer`, stop with `kiro_cancel`, branch with `kiro_session_fork` or `kiro_tangent`, and close with `kiro_session_close`.
 
 ## Tool reference

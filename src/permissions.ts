@@ -27,6 +27,8 @@ export interface BrokerConfig {
   allowShell: boolean;
   allowPersistentConsent: boolean;
   permissionTimeoutMs: number;
+  /** `off` never forwards pending requests as form elicitations (Requirement 12.12). Unset means `on`. */
+  elicitation?: "on" | "off";
 }
 
 export type Policy = "caller" | "shell_disabled" | "deny" | "allow" | "timeout" | "cancel" | "elicitation";
@@ -154,7 +156,7 @@ export class PermissionBroker {
     return new Promise((resolve) => {
       const cancelTimer = this.setTimer(() => this.timeout(pending.permissionId), this.cfg.permissionTimeoutMs);
       this.live.set(pending.permissionId, { pending, resolve, cancelTimer });
-      if (this.deps.elicit !== undefined) void this.elicit(pending);
+      if (this.deps.elicit !== undefined && this.cfg.elicitation !== "off") void this.elicit(pending);
     });
   }
 

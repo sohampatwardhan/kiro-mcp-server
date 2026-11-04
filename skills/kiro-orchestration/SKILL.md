@@ -3,7 +3,7 @@ name: kiro-orchestration
 description: Use when delegating coding work to Kiro CLI V3 through the kiro-mcp-server MCP tools (kiro_status, kiro_session_new, kiro_prompt, kiro_events, kiro_stream_session, kiro_permission_respond, kiro_run_headless). Covers when to hand a task to Kiro, choosing mode, model, effort, and permission handling, following a run live, collecting results and patches, and recovering when a session, turn, or the ACP host fails.
 metadata:
   author: Soham Patwardhan
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # Orchestrating Kiro CLI V3 with kiro-mcp-server

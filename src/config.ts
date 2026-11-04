@@ -11,6 +11,7 @@ import { parseRoots, RootsError } from "./paths.js";
 
 export type PermissionPolicy = "ask" | "deny" | "allow";
 export type HeadlessTrust = "none" | "tools" | "all";
+export type ElicitationSetting = "on" | "off";
 
 export interface Config {
   /** Path or name of the `kiro-cli` binary. */
@@ -26,6 +27,8 @@ export interface Config {
   headlessTrust: HeadlessTrust;
   allowTrustWorkspace: boolean;
   allowConfigWrites: boolean;
+  /** `off` stops forwarding pending permissions as form elicitations. */
+  elicitation: ElicitationSetting;
   cliTimeoutMs: number;
   requestTimeoutMs: number;
   headlessTimeoutMs: number;
@@ -85,6 +88,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     headlessTrust: parseEnum("KIRO_MCP_HEADLESS_TRUST", env.KIRO_MCP_HEADLESS_TRUST, ["none", "tools", "all"], "none"),
     allowTrustWorkspace: parseBooleanFlag("KIRO_MCP_ALLOW_TRUST_WORKSPACE", env.KIRO_MCP_ALLOW_TRUST_WORKSPACE),
     allowConfigWrites: parseBooleanFlag("KIRO_MCP_ALLOW_CONFIG_WRITES", env.KIRO_MCP_ALLOW_CONFIG_WRITES),
+    elicitation: parseEnum("KIRO_MCP_ELICITATION", env.KIRO_MCP_ELICITATION, ["on", "off"], "on"),
     cliTimeoutMs: parseMilliseconds("KIRO_MCP_CLI_TIMEOUT_MS", env.KIRO_MCP_CLI_TIMEOUT_MS) ?? 120_000,
     requestTimeoutMs: parseMilliseconds("KIRO_MCP_REQUEST_TIMEOUT_MS", env.KIRO_MCP_REQUEST_TIMEOUT_MS) ?? 120_000,
     headlessTimeoutMs: parseMilliseconds("KIRO_MCP_HEADLESS_TIMEOUT_MS", env.KIRO_MCP_HEADLESS_TIMEOUT_MS) ?? 3_600_000,
