@@ -4,7 +4,7 @@ This plan builds `kiro-mcp-server` from an empty repository to a publishable pac
 
 ## Task graph
 
-An arrow means depends-on. Primary critical path: 1, 2.1, 4.1, 4.2, 6.1, 7.1, 7.2, 8, 15, 16, 19.
+An arrow means depends-on. Primary critical path: 1, 2.1, 4.1, 4.2, 6.1, 7.1, 7.2, 8, 15, 16, 19, 20, 21. Tasks 20 to 22 are the revision for issues #5, #7, and #8.
 
 ```mermaid
 ---
@@ -60,6 +60,11 @@ flowchart TB
     t17["17. Live probe against a real kiro-cli (optional)"]
     t19["19. Bundled agent skills and CI install job"]
   end
+  subgraph phase8 [Phase 8 Issues 5, 7, 8]
+    i20["20. Elicitation opt-out"]
+    i21["21. auto_rejected in turn results"]
+    i22["22. Usage cache, totals, and guard"]
+  end
   subgraph legend [Legend]
     legCrit["Critical path"]
     legPar["Parallelizable"]
@@ -114,11 +119,14 @@ flowchart TB
   t16 --> t19
   t15 --> t16
   t15 --> t17
+  t19 --> i20
+  i20 --> i21
+  t19 --> i22
   classDef critical fill:#fde68a,stroke:#b45309,color:#1c1917
   classDef parallel fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
   classDef blocked fill:#fecaca,stroke:#b91c1c,color:#7f1d1d
-  class t1,t21,t41,t42,t61,t71,t72,t8,t15,t16,t19 critical
-  class t22,t23,t3,t5,t62,t63,t64,t65,t73,t9,t10,t11,t12,t13,t14,t18 parallel
+  class t1,t21,t41,t42,t61,t71,t72,t8,t15,t16,t19,i20,i21 critical
+  class t22,t23,t3,t5,t62,t63,t64,t65,t73,t9,t10,t11,t12,t13,t14,t18,i22 parallel
   class t17 blocked
   class legCrit critical
   class legPar parallel
@@ -140,6 +148,8 @@ Waves, computed from the arrows:
 | 9 | 15 |
 | 10 | 16, 17 (optional) |
 | 11 | 19 |
+| 12 | 20, 22 |
+| 13 | 21 |
 
 Three chains tie for longest: through 8, through 10, and through 18. The critical path shown goes through 8 because the permission flow is the core state change for orchestration.
 
@@ -444,3 +454,29 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - README **Install the skills** section with `npx skills add sohampatwardhan/kiro-mcp-server -g`, a `--skill kiro-orchestration` example, and an `-a <agent>` example
   - Tests: the CI job itself, run locally once with the same commands before pushing
   - _Requirements: 27.1, 27.2, 27.3, 27.4, 27.5_
+
+- [ ] 20. Elicitation opt-out
+  - `src/config.ts`: `KIRO_MCP_ELICITATION` parsed with `parseEnum` (`on`, `off`; default `on`) into `Config.elicitation`. Invalid values exit with code 2
+  - `src/permissions.ts`: `handle()` skips `elicit()` when `elicitation` is `off`. With forms on, accept, decline, and cancel keep their 12.11 behavior
+  - `kiro_status`: `policy.elicitation` and `policy.client_form_elicitation` (whether the connected client declared form elicitation)
+  - README configuration row and a permissions note for clients that decline forms without showing them; `SERVER_INSTRUCTIONS` line; `skills/kiro-orchestration` recovery row, with the skill version bumped
+  - Tests: `test/argv-config.test.ts` for the variable, `test/permissions.test.ts` (no elicit call with `off`, the request stays pending), and a smoke case with a client that declines every form: with `off` the request reaches `kiro_permissions` and `kiro_permission_respond` approves it
+  - _Requirements: 12.11, 12.12_
+
+- [ ] 21. auto_rejected in turn results
+  - `src/turns.ts`: `Turn.autoRejected` and `turnView` field `auto_rejected` (`permission_id`, `tool_call_id`, `title`, `policy`, `hint`)
+  - `src/server.ts` `wirePermissions`: on a reject decision with policy `shell_disabled`, `deny`, `timeout`, or `elicitation`, append to the session's active turn. Hints name `KIRO_MCP_ALLOW_SHELL=1`, `KIRO_MCP_PERMISSIONS`, `KIRO_MCP_PERMISSION_TIMEOUT_MS` and `kiro_permission_respond`, and `KIRO_MCP_ELICITATION=off`
+  - `kiro_prompt` and `kiro_events` output schemas gain `auto_rejected`; README turn result docs
+  - Tests: smoke cases for a `shell_disabled` rejection and an elicitation decline, each showing the hint, and an approved request not listed
+  - _Requirements: 12.13_
+
+- [ ] 22. Usage cache, totals, and guard
+  - `src/usage.ts` `UsageReader`: one shared in-flight `_kiro/account/getUsage` call, a 60 s cache on an injected clock, `refresh`, normalization into `remaining_total` and `percent_used` over the plan breakdowns, bonus credits, and add-on credits, and `guard()` that throws `USAGE_LIMIT_NEAR` and lets work go ahead when usage cannot be read
+  - `src/config.ts`: `KIRO_MCP_USAGE_STOP_PERCENT` (integer 1 to 100, unset by default)
+  - `src/errors.ts`: `USAGE_LIMIT_NEAR` in `ErrorCode`; README error table
+  - `kiro_usage`: `refresh?` input; `checked_at`, `cached`, `remaining_total`, `percent_used`, `stop_percent`, `blocked_by` output
+  - `guard()` before `kiro_prompt`, `kiro_tangent` `merge`, `kiro_workflow` `invoke`, and `kiro_run_headless` start work
+  - Fake fixture: `FAKE_KIRO_USAGE` selects a usage payload (plan only, plan plus bonus, near limit, `success: false`) and the fake counts `getUsage` calls in its meta log
+  - README `kiro_usage` and configuration sections, `SERVER_INSTRUCTIONS` line, skill note on checking usage before fanning out
+  - Tests: `test/usage.test.ts` and smoke cases for the fields, the cache (one host call for two reads), `refresh`, `USAGE_LIMIT_NEAR` on `kiro_prompt` and `kiro_run_headless` with nothing sent to Kiro, and work going ahead when usage fails
+  - _Requirements: 3.5, 3.6_
