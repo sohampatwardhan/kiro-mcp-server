@@ -140,7 +140,7 @@ stateDiagram-v2
    - `percent_used`: credits used over the credit limit across those same pools, from 0 to 100, or `null` when no pool has a limit;
    - `stop_percent` (the operator's `KIRO_MCP_USAGE_STOP_PERCENT`, or `null`) and `blocked_by` (a one-line reason when the guard in criterion 6 would refuse new work, otherwise `null`).
    The server SHALL reuse a plan reading for 60 s and share one host request between concurrent calls. `refresh: true` SHALL take a new reading. Reading usage SHALL never start a model turn.
-6. WHERE `KIRO_MCP_USAGE_STOP_PERCENT` is set (an integer from 1 to 100) THEN, before `kiro_prompt`, `kiro_tangent` `merge`, `kiro_workflow` `invoke`, or `kiro_run_headless` starts work, the server SHALL read usage (a cached reading counts) and fail with `USAGE_LIMIT_NEAR` when `percent_used` is at or above the threshold. The message SHALL name the percent used, the credits left, and the reset date, and nothing SHALL be sent to Kiro. IF usage cannot be read THEN the work SHALL go ahead. `kiro_steer`, `kiro_cancel`, and `kiro_session_compact` SHALL NOT be guarded.
+6. WHERE `KIRO_MCP_USAGE_STOP_PERCENT` is set (an integer from 1 to 100) THEN, before `kiro_prompt`, `kiro_tangent` `merge`, `kiro_workflow` `invoke`, or `kiro_run_headless` starts work, the server SHALL read usage (a cached reading counts) and fail with `USAGE_LIMIT_NEAR` when `percent_used` is at or above the threshold. The message SHALL name the percent used, the credits left, and the reset date, and no prompt, workflow, or headless run SHALL be sent to Kiro. IF usage cannot be read THEN the work SHALL go ahead. `kiro_steer`, `kiro_cancel`, and `kiro_session_compact` SHALL NOT be guarded.
 
 ### Requirement 4
 
