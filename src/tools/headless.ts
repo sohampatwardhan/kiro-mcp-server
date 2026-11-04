@@ -136,6 +136,7 @@ export function registerHeadlessTools(server: McpServer, core: Core): JobStore {
       if (args.repos !== undefined && args.cloud !== true) throw new ToolError("VALUE_NOT_ADVERTISED", "repos are only valid with cloud: true");
       const cwd = await roots.resolveInside(args.cwd);
       if (findCli(config.kiroBin, process.env, config.cwd) === null) throw new ToolError("CLI_NOT_FOUND", cliNotFoundMessage(config.kiroBin));
+      await core.usage.guard();
       const job = store.create(cwd);
       runHeadlessJob(store, job, {
         bin: config.kiroBin,

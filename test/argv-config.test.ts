@@ -25,6 +25,7 @@ describe("loadConfig", () => {
     assert.equal(c.allowTrustWorkspace, false);
     assert.equal(c.allowConfigWrites, false);
     assert.equal(c.elicitation, "on");
+    assert.equal(c.usageStopPercent, null);
     assert.equal(c.cliTimeoutMs, 120_000);
     assert.equal(c.requestTimeoutMs, 120_000);
     assert.equal(c.headlessTimeoutMs, 3_600_000);
@@ -43,6 +44,7 @@ describe("loadConfig", () => {
       KIRO_MCP_ALLOW_TRUST_WORKSPACE: "1",
       KIRO_MCP_ALLOW_CONFIG_WRITES: "true",
       KIRO_MCP_ELICITATION: "OFF",
+      KIRO_MCP_USAGE_STOP_PERCENT: "90",
       KIRO_MCP_CLI_TIMEOUT_MS: "5000",
       KIRO_MCP_REQUEST_TIMEOUT_MS: "6000",
       KIRO_MCP_HEADLESS_TIMEOUT_MS: "7000",
@@ -56,6 +58,7 @@ describe("loadConfig", () => {
     assert.equal(c.allowTrustWorkspace, true);
     assert.equal(c.allowConfigWrites, true);
     assert.equal(c.elicitation, "off");
+    assert.equal(c.usageStopPercent, 90);
     assert.equal(c.cliTimeoutMs, 5000);
     assert.equal(c.requestTimeoutMs, 6000);
     assert.equal(c.headlessTimeoutMs, 7000);
@@ -70,6 +73,9 @@ describe("loadConfig", () => {
   const invalid: [string, string][] = [
     ["KIRO_MCP_PERMISSIONS", "maybe"],
     ["KIRO_MCP_ELICITATION", "1"],
+    ["KIRO_MCP_USAGE_STOP_PERCENT", "0"],
+    ["KIRO_MCP_USAGE_STOP_PERCENT", "101"],
+    ["KIRO_MCP_USAGE_STOP_PERCENT", "50.5"],
     ["KIRO_MCP_PERMISSION_TIMEOUT_MS", "-1"],
     ["KIRO_MCP_PERMISSION_TIMEOUT_MS", "1.5"],
     ["KIRO_MCP_ALLOW_SHELL", "on"],

@@ -146,6 +146,7 @@ export function registerTurnTools(server: McpServer, core: Core): void {
         },
         { roots, cwd: session.cwd, promptCapabilities: host.capabilities?.promptCapabilities ?? {}, commands: session.commands },
       );
+      await core.usage.guard();
       const startCursor = session.feed.latestSeq;
       const turn = turns.start(session, blocks, args.when_busy ?? "reject");
       const stopProgress = progressReporter(extra, session.feed, startCursor);

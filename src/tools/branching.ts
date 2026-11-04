@@ -64,6 +64,7 @@ export function registerBranchingTools(server: McpServer, core: Core): void {
       const destId = tree.resolve(session.sessionId, args.destination ?? "parent");
       const { session: dest } = await sessions.attachById(destId);
       if (turns.activeTurn(dest.sessionId) !== undefined) throw new ToolError("TURN_ACTIVE", "the merge destination has a running turn; wait for it or cancel it");
+      await core.usage.guard();
       const waitMs = (args.wait_s ?? LIMITS.maxWaitS - 5) * 1_000;
       const deadline = Date.now() + waitMs;
       const summaryTurn = turns.start(session, [{ type: "text", text: SUMMARY_PROMPT }], "reject");

@@ -19,6 +19,7 @@ Hand a task to Kiro when it needs the operator's checkout and toolchain, a long 
 1. Call `kiro_status`. Stop and tell the user if `cli.found` is false (install with `curl -fsSL https://cli.kiro.dev/install | bash`), `signed_in` is false (they must run `kiro-cli login` in a terminal; never try to log in yourself), or `engine_v3.ready` is false.
 2. Read `warnings`. An untrusted root means Kiro will not load that folder's agents, steering, MCP servers, or skills: ask the user to run `kiro-cli --v3` in it once and choose **Trust, continue**. "Shell approvals are off" means Kiro cannot run commands, such as tests, until the operator sets `KIRO_MCP_ALLOW_SHELL=1`. Say so when the task needs tests.
 3. Work only inside the listed `roots`. Paths outside fail with `PATH_OUTSIDE_ROOTS`.
+4. Before fanning out several sessions or long runs, call `kiro_usage` and compare `remaining_total` with the work ahead. `blocked_by` not `null` means new work will fail with `USAGE_LIMIT_NEAR`: tell the user and wait for `reset_date`.
 
 ## Choose the session and its options
 

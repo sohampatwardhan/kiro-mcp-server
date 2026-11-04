@@ -470,7 +470,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - Tests: smoke cases for a `shell_disabled` rejection and an elicitation decline, each showing the hint, and an approved request not listed
   - _Requirements: 12.13_
 
-- [ ] 22. Usage cache, totals, and guard
+- [x] 22. Usage cache, totals, and guard
   - `src/usage.ts` `UsageReader`: one shared in-flight `_kiro/account/getUsage` call, a 60 s cache on an injected clock, `refresh`, normalization into `remaining_total` and `percent_used` over the plan breakdowns, bonus credits, and add-on credits, and `guard()` that throws `USAGE_LIMIT_NEAR` and lets work go ahead when usage cannot be read
   - `src/config.ts`: `KIRO_MCP_USAGE_STOP_PERCENT` (integer 1 to 100, unset by default)
   - `src/errors.ts`: `USAGE_LIMIT_NEAR` in `ErrorCode`; README error table

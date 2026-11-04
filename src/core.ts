@@ -4,6 +4,7 @@ import { Roots } from "./paths.js";
 import { ToolError } from "./errors.js";
 import { SessionRegistry, type AttachedSession } from "./sessions.js";
 import { TurnManager } from "./turns.js";
+import { UsageReader } from "./usage.js";
 
 /** The core modules every tool group uses, built once per server. */
 export interface Core {
@@ -12,6 +13,8 @@ export interface Core {
   host: AcpHost;
   sessions: SessionRegistry;
   turns: TurnManager;
+  /** Cached plan usage and the USAGE_LIMIT_NEAR guard on new work. */
+  usage: UsageReader;
   /** kiro_events for a headless job id. Replaced by the job store. */
   jobEvents: (jobId: string, args: Record<string, unknown>, extra: unknown) => Promise<never> | Promise<Record<string, unknown>>;
   /** Pending permissions for a session, as tool output. Replaced by the permission broker. */
@@ -34,12 +37,17 @@ export function createCore(config: Config, version: string): Core {
   });
   const sessions = new SessionRegistry(host, roots);
   const turns = new TurnManager(host, sessions);
+  const usage = new UsageReader(async () => {
+    await host.ensureStarted();
+    return host.call("_kiro/account/getUsage", {});
+  }, { stopPercent: config.usageStopPercent });
   return {
     config,
     roots,
     host,
     sessions,
     turns,
+    usage,
     jobEvents: (jobId) => Promise.reject(new ToolError("JOB_NOT_FOUND", `no headless job ${jobId}`)),
     pendingPermissions: () => [],
     cancelPermissions: () => undefined,

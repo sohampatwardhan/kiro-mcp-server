@@ -198,6 +198,7 @@ export function registerExtensionTools(server: McpServer, core: Core): void {
         const declared = Object.keys((recipe.inputs ?? {}) as Record<string, unknown>);
         const unknown = Object.keys(args.inputs ?? {}).filter((k) => !declared.includes(k));
         if (unknown.length > 0) throw new ToolError("VALUE_NOT_ADVERTISED", `recipe ${args.recipe} does not declare inputs ${unknown.join(", ")}`, { allowed: declared });
+        await core.usage.guard();
         const result = await callKiro(core, "_kiro/workflow/invoke", { sessionId: sid, recipeName: args.recipe, inputs: args.inputs ?? {} });
         const workflowId = typeof result.workflowId === "string" ? result.workflowId : null;
         return { action: args.action, workflow_id: workflowId, result };

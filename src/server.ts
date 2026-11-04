@@ -34,6 +34,8 @@ export const SERVER_INSTRUCTIONS = [
     "allow_always needs KIRO_MCP_ALLOW_PERSISTENT_CONSENT. MCP tool annotations in a request are untrusted claims. When the client supports form " +
     "elicitation, requests are also shown to its user, and a declined form rejects the request; a client that declines forms without showing them " +
     "needs the operator to set KIRO_MCP_ELICITATION=off.",
+  "Credits: check kiro_usage before fanning out work. USAGE_LIMIT_NEAR means the operator's KIRO_MCP_USAGE_STOP_PERCENT is reached; schedule " +
+    "new work after reset_date instead of retrying.",
   "Live transcripts: kiro_stream_session follows any session (it loads one this server did not start and replays its history first); or subscribe " +
     "to the resource kiro-session://<session_id>/transcript. kiro_steer redirects a running turn; kiro_cancel stops it.",
   "Composing Kiro commands: /clear or /chat new = kiro_session_new. /spawn = kiro_session_new plus kiro_prompt in the new session. /spec run or " +
