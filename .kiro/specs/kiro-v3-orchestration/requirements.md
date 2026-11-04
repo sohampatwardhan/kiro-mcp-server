@@ -134,6 +134,13 @@ stateDiagram-v2
 2. WHEN a turn finishes and the host sent a `session_info_update` with `_meta.kiro.kind: "turn_completion"` THEN the turn result SHALL include each `promptTurnSummaries` entry (unit, usage, used tools) and the elapsed time.
 3. WHEN `kiro_usage` is called with a `session_id` of an attached session THEN the result SHALL also include the sum of credits the server observed for that session's turns since it was attached.
 4. IF the host answers `_kiro/account/getUsage` with method-not-found THEN `kiro_usage` SHALL fail with `UNSUPPORTED_BY_KIRO` and still return the per-session totals when a `session_id` was given.
+5. WHEN `kiro_usage` returns THEN its result SHALL also include:
+   - `checked_at` (ISO 8601) for when the plan reading was taken, and `cached` saying whether it was reused;
+   - `remaining_total`: plan credits left (limit minus used, over the breakdowns) plus bonus and add-on credits left (total minus used), or `null` when no pool carries numbers;
+   - `percent_used`: credits used over the credit limit across those same pools, from 0 to 100, or `null` when no pool has a limit;
+   - `stop_percent` (the operator's `KIRO_MCP_USAGE_STOP_PERCENT`, or `null`) and `blocked_by` (a one-line reason when the guard in criterion 6 would refuse new work, otherwise `null`).
+   The server SHALL reuse a plan reading for 60 s and share one host request between concurrent calls. `refresh: true` SHALL take a new reading. Reading usage SHALL never start a model turn.
+6. WHERE `KIRO_MCP_USAGE_STOP_PERCENT` is set (an integer from 1 to 100) THEN, before `kiro_prompt`, `kiro_tangent` `merge`, `kiro_workflow` `invoke`, or `kiro_run_headless` starts work, the server SHALL read usage (a cached reading counts) and fail with `USAGE_LIMIT_NEAR` when `percent_used` is at or above the threshold. The message SHALL name the percent used, the credits left, and the reset date, and nothing SHALL be sent to Kiro. IF usage cannot be read THEN the work SHALL go ahead. `kiro_steer`, `kiro_cancel`, and `kiro_session_compact` SHALL NOT be guarded.
 
 ### Requirement 4
 
@@ -286,7 +293,9 @@ stateDiagram-v2
 8. WHILE `KIRO_MCP_PERMISSIONS` is `deny` THEN the server SHALL answer every request with the offered `reject_once` option. WHILE it is `allow` THEN the server SHALL answer with the offered `allow_once` option, except where criterion 7 applies.
 9. IF a pending permission stays unanswered for `KIRO_MCP_PERMISSION_TIMEOUT_MS` THEN the server SHALL answer it with the offered `reject_once` option and record `policy: "timeout"`.
 10. WHEN a tool request is denied THEN the turn SHALL continue. A plain denial SHALL stay distinct from a cancellation in the tool-call record.
-11. WHERE the MCP client declared the elicitation capability and a permission stays pending under `ask` THEN the server SHALL also send it to the client as a form elicitation whose only field is an enum of the offered option ids it would accept through `kiro_permission_respond` (criteria 5 and 7 still apply). An `accept` SHALL answer the request with that option. A `decline` SHALL answer it with the offered `reject_once` option. A `cancel`, an error, or a client without elicitation SHALL leave it pending for `kiro_permissions` and `kiro_permission_respond`.
+11. WHERE the MCP client declared form elicitation, `KIRO_MCP_ELICITATION` is not `off`, and a permission stays pending under `ask` THEN the server SHALL also send it to the client as a form elicitation whose only field is an enum of the offered option ids it would accept through `kiro_permission_respond` (criteria 5 and 7 still apply). An `accept` SHALL answer the request with that option. A `decline` SHALL answer it with the offered `reject_once` option. A `cancel`, an error, or a client without elicitation SHALL leave it pending for `kiro_permissions` and `kiro_permission_respond`.
+12. WHILE `KIRO_MCP_ELICITATION` is `off` THEN the server SHALL send no elicitation, and every request pending under `ask` SHALL wait for `kiro_permission_respond` or the timeout in criterion 9. `kiro_status` SHALL report the setting and whether the client declared form elicitation. This lets operators of clients that decline forms without showing them to a person keep `ask` (issues #7, #8).
+13. WHEN the server answers a request with a reject option without the calling agent choosing it (policy `shell_disabled`, `deny`, `timeout`, or `elicitation`) THEN the turn record returned by `kiro_prompt` and `kiro_events` SHALL list it under `auto_rejected` with the permission id, tool call id, title, policy, and a hint naming the operator setting or action that would change the outcome.
 
 ### Requirement 13
 
@@ -629,7 +638,7 @@ flowchart LR
 | V3 capability | Source | MCP tool | Requirement | Status | Notes |
 | --- | --- | --- | --- | --- | --- |
 | Approval prompts | `session/request_permission` | `kiro_permissions`, `kiro_permission_respond` | 12.1–12.4, 12.10 | Exposed | |
-| Approval prompts shown to the client's user | MCP elicitation | forwarded by the server | 12.11 | Composed | Only when the client declares elicitation |
+| Approval prompts shown to the client's user | MCP elicitation | forwarded by the server | 12.11, 12.12 | Composed | Only when the client declares form elicitation and `KIRO_MCP_ELICITATION` is not `off` |
 | Hook confirmation requests | `session/request_permission` | same | 12.1 | Exposed | |
 | Shell approvals | consent capability `shell` | `kiro_permission_respond` | 12.7 | Gated | `KIRO_MCP_ALLOW_SHELL` |
 | Persistent consent (always allow or deny) | `_meta.kiro.consent` response | `kiro_permission_respond` | 12.5, 12.6 | Gated | `KIRO_MCP_ALLOW_PERSISTENT_CONSENT` |
@@ -690,7 +699,7 @@ flowchart LR
 | Headless cloud runs | `--cloud --repo` | `kiro_run_headless` | 22.1 | Exposed | |
 | Headless workflow wait timeout | env var | `kiro_run_headless` `workflow_timeout_s` | 22.6 | Exposed | |
 | API key auth (`KIRO_API_KEY`) | env var | inherited by headless children | 22.7 | Exposed | Operator only |
-| Usage and credits (`/usage`) | `_kiro/account/getUsage` | `kiro_usage` | 3.1, 3.3, 3.4 | Exposed | Works on 2.37.1 but is not advertised |
+| Usage and credits (`/usage`) | `_kiro/account/getUsage` | `kiro_usage` | 3.1, 3.3–3.6 | Exposed | Works on 2.37.1 but is not advertised. `KIRO_MCP_USAGE_STOP_PERCENT` guards new work |
 | Who am I, profile | `kiro-cli whoami --format json`, `profile` | `kiro_status` | 2.2 | Exposed | |
 | Login check | `whoami` | `kiro_status` | 2.3, 2.5 | Exposed | |
 | Login, logout | `kiro-cli login`, `logout` | none | 2.3 | Impossible | Login needs a person in a browser or device flow. Logout is withheld because it signs out the operator's machine |
