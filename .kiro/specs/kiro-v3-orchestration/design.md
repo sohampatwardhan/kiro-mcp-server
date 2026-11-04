@@ -104,6 +104,9 @@ Decisions 9 to 14 were settled on issue #2 (the decisions comment). The shell qu
 | 14 | Shell approvals stay off by default (`KIRO_MCP_ALLOW_SHELL`), with the opt-in documented in the README and the skill | Same default as `claude-code-mcp-server`. ACP sessions cannot run tests until the operator opts in |
 | 15 | Skills live in `skills/` at the repository root and install from GitHub with `npx skills`. They are not in the npm package | `npx skills add <owner>/<repo>` reads the repository. CI installs from the checkout, so the tested path is the published path (Requirement 27) |
 | 16 | The SemVer check script is copied from `KaTeX-Agent-Skill/scripts/check-skill-versions.mjs` | It is dependency-free and requires a quoted version, as issue #3 asks |
+| 17 | `KIRO_MCP_ELICITATION` (`on` by default, or `off`) switches the elicitation forward off. A `decline` still means reject when forms are on (12.11, 12.12) | Issues #7 and #8: some clients declare form elicitation but decline every form without showing it, so every request was rejected within milliseconds. Making `decline` leave the request pending instead would let the calling agent approve what a person refused. An operator switch keeps both kinds of client safe |
+| 18 | Rejections the server made on its own are listed per turn as `auto_rejected`, each with a hint naming the setting (12.13) | The tool-call record already says `denied`, but not why or what to change. Issue #7's reporter could not tell a policy rejection from a client one |
+| 19 | The usage guard counts plan, bonus, and add-on credits as one pool and checks only before a tool starts work (3.6). An unreadable reading lets work go ahead | Kiro spends plan credits and then bonus credits, so one percentage is what runs out. Same rule as `claude-code-mcp-server` (its issue #29): a budget guard, not a security control. Steer, cancel, and compact serve work already running |
 
 ### Requirement coverage
 
@@ -111,7 +114,7 @@ Decisions 9 to 14 were settled on issue #2 (the decisions comment). The shell qu
 | --- | --- |
 | 1 Startup, packaging | `src/index.ts`, `src/config.ts`, `src/prereq.ts`, `.github/workflows/ci.yml`, `release.yml` |
 | 2 Status, auth, diagnostics | `kiro_status`, `src/cli.ts`, `src/parse.ts` |
-| 3 Usage | `kiro_usage`, `Turn.credits` |
+| 3 Usage | `kiro_usage`, `Turn.credits`, `src/usage.ts` `UsageReader` (3.5, 3.6) |
 | 4 Roots | `src/paths.ts` `Roots.resolveInside` |
 | 5 Host | `src/acp/jsonrpc.ts`, `src/acp/host.ts` |
 | 6–8 Sessions | `src/sessions.ts`, session tools |
@@ -131,7 +134,8 @@ Decisions 9 to 14 were settled on issue #2 (the decisions comment). The shell qu
 | 26 Transcript streaming | `src/tools/stream.ts`, `src/transcript.ts`, `EventFeed` |
 | 27 Bundled skills | `skills/kiro-orchestration/`, `scripts/check-skill-versions.mjs`, the `skills` CI job |
 | 2.6 Workspace trust | `src/trust.ts` |
-| 12.11 Elicitation | `src/permissions.ts` `PermissionBroker.elicit` |
+| 12.11, 12.12 Elicitation | `src/permissions.ts` `PermissionBroker.elicit`, `Config.elicitation` |
+| 12.13 Auto-rejections | `Turn.autoRejected`, `src/server.ts` `wirePermissions` |
 
 ## Architecture
 
@@ -294,6 +298,7 @@ src/tools/config.ts       kiro_agents, kiro_mcp_config, kiro_settings, kiro_powe
 src/tools/stream.ts       kiro_stream_session, the kiro-session://{session_id}/transcript resource, subscriptions
 src/transcript.ts         readStream (type filter, max_chars, gap), TranscriptNotifier (coalesced resources/updated)
 src/trust.ts              workspaceTrust(root): read-only check of Kiro's saved workspace trust
+src/usage.ts              UsageReader: cached _kiro/account/getUsage reading, credit totals, the USAGE_LIMIT_NEAR guard
 test/fixtures/fake-kiro.mjs   stand-in kiro-cli: acp server, headless chat, subcommands
 skills/kiro-orchestration/SKILL.md   agent skill, plus references/ (Requirement 27)
 scripts/check-skill-versions.mjs     SemVer check for every SKILL.md
@@ -316,7 +321,7 @@ All inputs are strict zod objects. Ids are validated with patterns:
 | Tool | Kiro call | Key inputs | Key outputs |
 | --- | --- | --- | --- |
 | `kiro_status` | `--version`, host `initialize`, `whoami --format json`, `profile`, optionally `diagnostic --format json` and `doctor --all` | `include_diagnostics?` | cli, version, engine_v3, capabilities, signed_in, account, roots, policy, log_paths, dropped_lines |
-| `kiro_usage` | `_kiro/account/getUsage` | `session_id?` | plan, reset_date, breakdowns, bonus_credits, add_on_credits, overages_enabled, session_credits |
+| `kiro_usage` | `_kiro/account/getUsage` (cached 60 s) | `session_id?`, `refresh?` | plan, reset_date, breakdowns, bonus_credits, add_on_credits, overages_enabled, session_credits, remaining_total, percent_used, checked_at, cached, stop_percent, blocked_by |
 | `kiro_session_new` | `session/new`, then `_kiro/session/rename` | `cwd`, `additional_directories?`, `mode?`, `model?`, `effort?`, `title?`, `execution_target?` (`local` or `cloud`), `repos?` | session_id, modes, config_options, commands, context_usage, warnings |
 | `kiro_session_list` | `session/list` | `scope?`, `cwd?`, `source?`, `title_contains?`, `limit?` | sessions, omitted_count |
 | `kiro_session_load` | `session/load` | `session_id` or `latest` + `cwd`, `cwd?`, `additional_directories?` | session_id, modes, config_options, pending_permissions, replay_summary, cursor |
@@ -328,7 +333,7 @@ All inputs are strict zod objects. Ids are validated with patterns:
 | `kiro_session_compact` | `_kiro/session/compact` | `session_id` | context_usage |
 | `kiro_session_close` | `session/close` | `session_id` | final_cursor |
 | `kiro_session_delete` | `session/delete` | `session_id`, `confirm` | deleted |
-| `kiro_prompt` | `session/prompt` | `session_id`, `text?`, `files?`, `images?`, `command?`, `wait_s?`, `when_busy?` | turn_id, status, cursor, final_text, stop_reason, tool_calls, credits, pending_permissions |
+| `kiro_prompt` | `session/prompt` | `session_id`, `text?`, `files?`, `images?`, `command?`, `wait_s?`, `when_busy?` | turn_id, status, cursor, final_text, stop_reason, tool_calls, credits, auto_rejected, pending_permissions |
 | `kiro_events` | event feed | `session_id` or `job_id`, `cursor?`, `limit?`, `wait_s?`, `include_thoughts?` | events, next_cursor, lowest_cursor, status, pending_permissions, omitted_thoughts |
 | `kiro_steer` | `_session/steer` | `session_id`, `text` | accepted, cursor |
 | `kiro_cancel` | `session/cancel`, or job kill | `session_id` or `job_id` | status, turn |
@@ -413,6 +418,7 @@ classDiagram
     +finalText string
     +toolCalls Map
     +credits CreditSummary[]
+    +autoRejected AutoRejection[]
   }
   class PermissionBroker {
     +onRequest(params) Promise~PermissionOutcome~
@@ -457,7 +463,7 @@ export type KiroEvent =
       rawInput?: unknown; rawOutputTail?: string }
   | { seq: number; at: string; type: "plan"; entries: { content: string; status: string; priority?: string }[] }
   | { seq: number; at: string; type: "permission_requested" | "permission_resolved"; permissionId: string;
-      toolCallId: string; optionId?: string; policy?: "caller" | "shell_disabled" | "deny" | "allow" | "timeout" | "cancel" }
+      toolCallId: string; optionId?: string; policy?: "caller" | "shell_disabled" | "deny" | "allow" | "timeout" | "cancel" | "elicitation" }
   | { seq: number; at: string; type: "turn"; phase: "start" | "completion" | "end" | "settled"; turnId: string;
       stopReason?: string; credits?: CreditSummary[]; elapsedMs?: number }
   | { seq: number; at: string; type: "state"; kind: "mode" | "config" | "commands" | "context_usage" | "title" | "focus" }
@@ -545,6 +551,8 @@ export class TranscriptNotifier { subscribe(uri: string): void; unsubscribe(uri:
 - Compose `/clear` as `kiro_session_new`, `/spawn` as `kiro_session_new` plus `kiro_prompt`, `/spec run` as Spec mode plus a prompt, and `/goal` as `kiro_workflow` or `autonomous` mode.
 - Follow a run live with `kiro_stream_session`, or subscribe to `kiro-session://<id>/transcript`.
 - Shell approvals are off unless the operator sets `KIRO_MCP_ALLOW_SHELL`, and workspaces must be trusted once in `kiro-cli --v3`.
+- A turn's `auto_rejected` lists requests the server rejected on its own, each with the setting that would change it. A client that declines approval forms without showing them needs `KIRO_MCP_ELICITATION=off`.
+- Check `kiro_usage` before fanning out work. `USAGE_LIMIT_NEAR` means the operator's credit threshold is reached: wait for the reset date rather than retrying.
 - Impossible features: archive import, attaching a repository later, file checkpoints, MCP OAuth, login, ACP workspace trust. Each comes with its reason.
 
 ### Configuration
@@ -560,6 +568,8 @@ All variables are optional. Invalid values exit with code 2.
 | `KIRO_MCP_PERMISSION_TIMEOUT_MS` | `600000` | Auto-reject after this long |
 | `KIRO_MCP_ALLOW_SHELL` | off | Lets shell-capability requests be approved |
 | `KIRO_MCP_ALLOW_PERSISTENT_CONSENT` | off | Allows `allow_always` responses |
+| `KIRO_MCP_ELICITATION` | `on` | `on` or `off`. `off` stops forwarding pending permissions as form elicitations (12.12) |
+| `KIRO_MCP_USAGE_STOP_PERCENT` | unset | An integer from 1 to 100. New work fails with `USAGE_LIMIT_NEAR` at or above this share of credits used (3.6) |
 | `KIRO_MCP_HEADLESS_TRUST` | `none` | `none`, `tools`, or `all` |
 | `KIRO_MCP_ALLOW_TRUST_WORKSPACE` | off | Allows headless `--trust-workspace` |
 | `KIRO_MCP_ALLOW_CONFIG_WRITES` | off | Allows agent, MCP, settings, and powers writes |
@@ -719,7 +729,7 @@ stateDiagram-v2
 | Paths and content | `PATH_OUTSIDE_ROOTS`, `PATH_EXISTS`, `CONTENT_TOO_LARGE` |
 | Sessions and turns | `SESSION_NOT_FOUND`, `TURN_ACTIVE`, `NO_ACTIVE_TURN`, `QUEUE_FULL`, `VALUE_NOT_ADVERTISED` |
 | Permissions | `PERMISSION_NOT_FOUND`, `OPTION_NOT_OFFERED`, `PERSISTENT_CONSENT_DISABLED`, `SHELL_APPROVAL_DISABLED` |
-| Operator gates | `HEADLESS_TRUST_DISABLED`, `CONFIG_WRITES_DISABLED`, `STDIO_SERVER_WITHHELD`, `SETTING_WITHHELD`, `CONFIRMATION_REQUIRED` |
+| Operator gates | `HEADLESS_TRUST_DISABLED`, `CONFIG_WRITES_DISABLED`, `STDIO_SERVER_WITHHELD`, `SETTING_WITHHELD`, `CONFIRMATION_REQUIRED`, `USAGE_LIMIT_NEAR` |
 | Lookups | `JOB_NOT_FOUND`, `SPEC_NOT_FOUND`, `TANGENT_NOT_FOUND`, `INVALID_MERGE_TARGET`, `NOTHING_TO_BRANCH` |
 
 The error body is `{ error: { code, message, details } }`. `details.kiro` holds `{ code, message, errorType }` from a Kiro JSON-RPC error. `details.cli` holds `{ exitCode, stdoutTail, stderrTail }` with control sequences removed.
@@ -766,7 +776,8 @@ flowchart TB
 | --- | --- |
 | `test/jsonrpc.test.ts` | Framing across chunk boundaries, ids, request and notification routing, `-32601` for unknown requests, line cap, invalid JSON counting |
 | `test/events.test.ts` | Normalizer for every probed update kind, chunk coalescing, tool-call merge by `toolCallId`, replay marking, ring-buffer caps and `lowestCursor`, `waitFor` |
-| `test/permissions.test.ts` | Policy matrix (`ask`, `deny`, `allow`) × capability (shell, other) × options offered, persistent consent gate, timeout, never synthesizing an option, cancel |
+| `test/permissions.test.ts` | Policy matrix (`ask`, `deny`, `allow`) × capability (shell, other) × options offered, persistent consent gate, timeout, never synthesizing an option, cancel, no elicitation with `KIRO_MCP_ELICITATION=off` |
+| `test/usage.test.ts` | Usage normalization (`remaining_total`, `percent_used` with plan, bonus, and add-on pools, missing numbers), the 60 s cache and `refresh` (injected clock), one shared in-flight read, the guard threshold and the unreadable case |
 | `test/paths.test.ts` | Roots parsing, `/` refused, symlink in and out, prefix-sibling, macOS `/tmp` vs `/private/tmp` |
 | `test/argv-config.test.ts` | `acpArgv` has no v2 flags, `headlessArgv` order and gates, subcommand argv, env validation exit 2 |
 | `test/parse.test.ts` | whoami JSON, settings JSON, `mcp list` and `status` text with ANSI codes, models JSON, tasks.md checkbox parse |
@@ -777,7 +788,7 @@ flowchart TB
 | `test/host.test.ts` | Spawn and initialize against the fake, method gating (`KNOWN_UNADVERTISED`), crash detaches sessions, re-attach with `session/load` before the next call, no prompt resent |
 | `test/transcript.test.ts` | `readStream` type filter with cursor advance, `max_chars` truncation and resume, `gap`, idempotent re-reads, notifier coalescing (injected timer) |
 | `test/trust.test.ts` | `workspaceTrust` against a temp `HOME`: trusted, missing file, unreadable file, home directory |
-| `test/smoke.test.ts` | Every tool over stdio through the SDK `Client`: schemas and `outputSchema`, server instructions, prompt-then-poll, permission respond, steer, cancel, fork, tangent, specs, extensions, cloud target, headless job lifecycle and exit codes, config write gates, error bodies, shutdown stopping every child, `kiro_stream_session` on a loaded (not attached) session with replay, cancel and close, the transcript resource read, subscribe and `notifications/resources/updated`, and elicitation accept, decline, and cancel through a client that declares the capability |
+| `test/smoke.test.ts` | Every tool over stdio through the SDK `Client`: schemas and `outputSchema`, server instructions, prompt-then-poll, permission respond, steer, cancel, fork, tangent, specs, extensions, cloud target, headless job lifecycle and exit codes, config write gates, error bodies, shutdown stopping every child, `kiro_stream_session` on a loaded (not attached) session with replay, cancel and close, the transcript resource read, subscribe and `notifications/resources/updated`, elicitation accept, decline, and cancel through a client that declares the capability, no form with `KIRO_MCP_ELICITATION=off`, `auto_rejected` hints for `shell_disabled` and `elicitation`, and `kiro_usage` cache, `refresh`, and `USAGE_LIMIT_NEAR` on `kiro_prompt` and `kiro_run_headless` |
 
 CI also runs a `skills` job: `node scripts/check-skill-versions.mjs skills`, then `npx -y skills add "$GITHUB_WORKSPACE" -g -y -a claude-code -a codex --json` with a throwaway `HOME` and `CI=true`, then `jq` asserts every entry is `installed` and a shell loop asserts each `skills/*/SKILL.md` exists under `$HOME/.agents/skills/` (Requirement 27.5).
 
