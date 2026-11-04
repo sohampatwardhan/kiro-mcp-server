@@ -130,6 +130,38 @@ describe("kiro_usage", () => {
     }
   });
 
+  it("reports credit totals, reuses a reading for 60 s, and refreshes on request", async () => {
+    const c = await connect({ env: { KIRO_MCP_USAGE_STOP_PERCENT: "90" } });
+    try {
+      type U = { remaining_total: number; percent_used: number; checked_at: string; cached: boolean; stop_percent: number | null; blocked_by: string | null; session_credits: unknown };
+      const a = await c.ok<U>("kiro_usage", {});
+      // Plan 3 of 50 plus bonus 10 of 500: 537 left, 13 of 550 used.
+      assert.equal(a.remaining_total, 537);
+      assert.equal(a.percent_used, 2.36);
+      assert.equal(a.cached, false);
+      assert.equal(a.stop_percent, 90);
+      assert.equal(a.blocked_by, null);
+      assert.equal(a.session_credits, null);
+      const b = await c.ok<U>("kiro_usage", {});
+      assert.equal(b.cached, true);
+      assert.equal(b.checked_at, a.checked_at);
+      assert.equal((await c.ok<U>("kiro_usage", { refresh: true })).cached, false);
+      const reads = (await c.meta()).filter((m) => m.kind === "request" && m.method === "_kiro/account/getUsage");
+      assert.equal(reads.length, 2);
+    } finally {
+      await c.close();
+    }
+  });
+
+  it("maps a refused reading to KIRO_REFUSED", async () => {
+    const c = await connect({ env: { FAKE_KIRO_USAGE: "refused" } });
+    try {
+      assert.equal((await c.fail("kiro_usage", {})).code, "KIRO_REFUSED");
+    } finally {
+      await c.close();
+    }
+  });
+
   it("fails with UNSUPPORTED_BY_KIRO but still returns session credits", async () => {
     const c = await connect({ env: { FAKE_KIRO_NO_USAGE: "1" } });
     try {
@@ -140,6 +172,45 @@ describe("kiro_usage", () => {
       assert.deepEqual(err.details.session_credits, { credit: 0.25 });
     } finally {
       await c.close();
+    }
+  });
+});
+
+describe("KIRO_MCP_USAGE_STOP_PERCENT", () => {
+  it("refuses kiro_prompt and kiro_run_headless with USAGE_LIMIT_NEAR and sends nothing to Kiro", async () => {
+    const c = await connect({ env: { KIRO_MCP_USAGE_STOP_PERCENT: "90", FAKE_KIRO_USAGE: "near" } });
+    try {
+      const usage = await c.ok<{ percent_used: number; blocked_by: string | null }>("kiro_usage", {});
+      assert.equal(usage.percent_used, 94.55);
+      assert.match(usage.blocked_by ?? "", /94\.55% of credits used/);
+      const id = (await c.ok<{ session_id: string }>("kiro_session_new", { cwd: c.work })).session_id;
+      const err = await c.fail("kiro_prompt", { session_id: id, text: "hello" });
+      assert.equal(err.code, "USAGE_LIMIT_NEAR");
+      assert.match(err.message, /30 credits left/);
+      assert.match(err.message, /2026-12-01/);
+      assert.equal(err.details.stop_percent, 90);
+      assert.equal((await c.fail("kiro_run_headless", { cwd: c.work, prompt: "hello" })).code, "USAGE_LIMIT_NEAR");
+      assert.equal((await c.fail("kiro_workflow", { action: "invoke", session_id: id, recipe: "goal", inputs: { goal: "x" } })).code, "USAGE_LIMIT_NEAR");
+      const meta = await c.meta();
+      assert.equal(meta.filter((m) => m.kind === "request" && m.method === "_kiro/workflow/invoke").length, 0);
+      assert.equal(meta.filter((m) => m.kind === "request" && m.method === "session/prompt").length, 0);
+      assert.equal(meta.filter((m) => m.kind === "start" && (m.argv as string[])[0] === "chat").length, 0);
+    } finally {
+      await c.close();
+    }
+  });
+
+  it("lets work go ahead below the threshold and when usage cannot be read", async () => {
+    const envs: Record<string, string>[] = [{ KIRO_MCP_USAGE_STOP_PERCENT: "95", FAKE_KIRO_USAGE: "near" }, { KIRO_MCP_USAGE_STOP_PERCENT: "1", FAKE_KIRO_NO_USAGE: "1" }];
+    for (const env of envs) {
+      const c = await connect({ env });
+      try {
+        const id = (await c.ok<{ session_id: string }>("kiro_session_new", { cwd: c.work })).session_id;
+        const p = await c.ok<{ status: string }>("kiro_prompt", { session_id: id, text: "hello" });
+        assert.equal(p.status, "completed");
+      } finally {
+        await c.close();
+      }
     }
   });
 });

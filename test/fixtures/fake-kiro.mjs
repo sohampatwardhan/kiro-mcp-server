@@ -16,6 +16,7 @@
 //   FAKE_KIRO_NO_CLOUD      initialize does not advertise cloud-sandbox
 //   FAKE_KIRO_NO_IMAGES     initialize advertises promptCapabilities.image false
 //   FAKE_KIRO_NO_USAGE      _kiro/account/getUsage is method-not-found
+//   FAKE_KIRO_USAGE         getUsage payload: "near" (94.55% of credits used) or "refused" (success false)
 //   FAKE_KIRO_EMPTY_HISTORY _kiro/session/history returns no updates
 //   FAKE_KIRO_WORKFLOWS_OFF workflow methods answer success false
 //   FAKE_KIRO_HEADLESS_EXIT headless exit code (0, 3, 4) or "hang" or "interrupt"
@@ -489,6 +490,23 @@ function acp() {
         return { usagePercentage: session(p.sessionId).context, breakdown: { tools: { tokens: 2000 } } };
       case "_kiro/account/getUsage":
         if (env.FAKE_KIRO_NO_USAGE) throw notFound(method);
+        // Field names match a live getUsage answer (kiro-cli 3.0.0, 2026-11-04): usageBreakdowns[] with
+        // resourceType "CREDIT", used, limit, percentage; bonusCredits[] with name, used, total, daysUntilExpiry.
+        // addOnCredits was empty there, so its entries are assumed to share the bonus shape.
+        if (env.FAKE_KIRO_USAGE === "refused") return { success: false, message: "usage is unavailable" };
+        if (env.FAKE_KIRO_USAGE === "near") {
+          return {
+            success: true,
+            data: {
+              planName: "KIRO FREE",
+              billingCycleReset: "2026-12-01",
+              overagesEnabled: false,
+              usageBreakdowns: [{ resourceType: "CREDIT", displayName: "Credits", used: 50, limit: 50, percentage: 100 }],
+              bonusCredits: [{ name: "welcome", used: 470, total: 500, daysUntilExpiry: 30 }],
+              addOnCredits: [],
+            },
+          };
+        }
         return {
           success: true,
           message: "Plan: KIRO FREE | 1 usage breakdowns",

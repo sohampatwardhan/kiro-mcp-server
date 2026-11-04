@@ -43,6 +43,8 @@ export function registerStatusTools(server: McpServer, core: Core): void {
           headless_trust: z.string(),
           allow_trust_workspace: z.boolean(),
           allow_config_writes: z.boolean(),
+          elicitation: z.enum(["on", "off"]),
+          client_form_elicitation: z.boolean(),
         }),
         log_paths: z.array(z.string()),
         dropped_lines: z.number(),
@@ -148,6 +150,8 @@ export function registerStatusTools(server: McpServer, core: Core): void {
           headless_trust: config.headlessTrust,
           allow_trust_workspace: config.allowTrustWorkspace,
           allow_config_writes: config.allowConfigWrites,
+          elicitation: config.elicitation,
+          client_form_elicitation: server.server.getClientCapabilities()?.elicitation?.form !== undefined,
         },
         log_paths: logPaths,
         dropped_lines: host.droppedLines,
@@ -164,10 +168,12 @@ export function registerStatusTools(server: McpServer, core: Core): void {
     {
       title: "Kiro usage and credits",
       description:
-        "Plan usage from _kiro/account/getUsage, like /usage: plan name, billing cycle reset date, usage breakdowns (resource type, used, limit, percentage), " +
-        "bonus and add-on credits, and whether overages are enabled. With session_id, also the credits this server observed for that session's turns since it " +
-        "was attached. UNSUPPORTED_BY_KIRO errors still carry session_credits in their details.",
-      input: z.object({ session_id: sessionId.optional() }).strict(),
+        "Plan usage from _kiro/account/getUsage, like /usage, without starting a model turn: plan name, billing cycle reset date, usage breakdowns " +
+        "(resource type, used, limit, percentage), bonus and add-on credits, whether overages are enabled, and remaining_total and percent_used across " +
+        "plan, bonus, and add-on credits. Readings are reused for 60 s (cached, checked_at); refresh: true takes a new one. stop_percent is the " +
+        "operator's KIRO_MCP_USAGE_STOP_PERCENT and blocked_by says why new work would fail with USAGE_LIMIT_NEAR. With session_id, also the credits " +
+        "this server observed for that session's turns since it was attached. UNSUPPORTED_BY_KIRO errors still carry session_credits in their details.",
+      input: z.object({ session_id: sessionId.optional(), refresh: z.boolean().optional() }).strict(),
       output: z.object({
         plan: z.string().nullable(),
         reset_date: z.string().nullable(),
@@ -175,6 +181,12 @@ export function registerStatusTools(server: McpServer, core: Core): void {
         bonus_credits: z.array(json),
         add_on_credits: z.array(json),
         overages_enabled: z.boolean().nullable(),
+        remaining_total: z.number().nullable(),
+        percent_used: z.number().nullable(),
+        checked_at: z.string(),
+        cached: z.boolean(),
+        stop_percent: z.number().nullable(),
+        blocked_by: z.string().nullable(),
         session_credits: z.record(z.string(), z.number()).nullable(),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
@@ -182,32 +194,16 @@ export function registerStatusTools(server: McpServer, core: Core): void {
     async (args) => {
       const session = args.session_id !== undefined ? sessions.require(args.session_id) : undefined;
       const sessionCredits = session === undefined ? null : Object.fromEntries(session.creditTotals);
-      let result: Record<string, unknown> | null;
       try {
-        result = (await host.call("_kiro/account/getUsage", session !== undefined ? { sessionId: session.sessionId } : {})) as Record<string, unknown> | null;
+        const reading = await core.usage.read({ refresh: args.refresh === true });
+        return { ...reading, session_credits: sessionCredits };
       } catch (err) {
         if (err instanceof ToolError && err.code === "UNSUPPORTED_BY_KIRO") {
           throw new ToolError("UNSUPPORTED_BY_KIRO", "this Kiro host does not implement _kiro/account/getUsage", { ...err.details, session_credits: sessionCredits });
         }
+        if (err instanceof ToolError && err.code === "KIRO_REFUSED") throw new ToolError("KIRO_REFUSED", err.message, { session_credits: sessionCredits });
         throw err;
       }
-      if (result?.success === false) throw new ToolError("KIRO_REFUSED", typeof result.message === "string" ? result.message : "Kiro refused the usage request", { session_credits: sessionCredits });
-      const data = ((result?.data ?? result ?? {}) as Record<string, unknown>);
-      const s = (v: unknown) => (typeof v === "string" ? v : null);
-      const n = (v: unknown) => (typeof v === "number" ? v : null);
-      const arr = (v: unknown) => (Array.isArray(v) ? v : []);
-      return {
-        plan: s(data.planName),
-        reset_date: s(data.billingCycleReset),
-        breakdowns: arr(data.usageBreakdowns).map((b) => {
-          const r = (b ?? {}) as Record<string, unknown>;
-          return { resource_type: s(r.resourceType), display_name: s(r.displayName), used: n(r.used), limit: n(r.limit), percentage: n(r.percentage) };
-        }),
-        bonus_credits: arr(data.bonusCredits),
-        add_on_credits: arr(data.addOnCredits),
-        overages_enabled: typeof data.overagesEnabled === "boolean" ? data.overagesEnabled : null,
-        session_credits: sessionCredits,
-      };
     },
   );
 }

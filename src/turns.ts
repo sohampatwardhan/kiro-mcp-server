@@ -20,6 +20,15 @@ export interface ToolCallSummary {
   failureReason?: FailureReason;
 }
 
+/** A permission request the server rejected without the calling agent choosing it (Requirement 12.13). */
+export interface AutoRejection {
+  permission_id: string;
+  tool_call_id: string;
+  title: string;
+  policy: string;
+  hint: string;
+}
+
 /** One session/prompt request and the updates it produced (the turn lifecycle in the requirements). */
 export class Turn {
   readonly turnId = `turn_${randomBytes(8).toString("hex")}`;
@@ -27,6 +36,7 @@ export class Turn {
   stopReason: string | null = null;
   error: { code: string; message: string } | null = null;
   credits: CreditSummary[] = [];
+  readonly autoRejected: AutoRejection[] = [];
   kiroElapsedMs: number | null = null;
   startedAt: number | null = null;
   settledAt: number | null = null;
@@ -89,6 +99,7 @@ export function turnView(turn: Turn) {
       failure_reason: t.failureReason ?? null,
     })),
     credits: turn.credits,
+    auto_rejected: turn.autoRejected,
     elapsed_ms: turn.elapsedMs,
     error: turn.error,
   };

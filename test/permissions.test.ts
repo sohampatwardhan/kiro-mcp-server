@@ -164,4 +164,21 @@ describe("PermissionBroker", () => {
     // allow_always is left out: persistent consent is off.
     assert.deepEqual(schema.properties.option.oneOf.map((o) => o.const), ["accept", "reject", "always-reject"]);
   });
+
+  it("sends no elicitation when KIRO_MCP_ELICITATION is off, and the request stays pending", async () => {
+    let asked = 0;
+    const broker = new PermissionBroker(cfg({ elicitation: "off" }), {
+      elicit: async () => {
+        asked += 1;
+        return { action: "decline" };
+      },
+    });
+    const answer = broker.handle(request("fs_write"));
+    await new Promise((r) => setTimeout(r, 10));
+    assert.equal(asked, 0);
+    const [pending] = broker.list();
+    assert.ok(pending);
+    broker.respond(pending.permissionId, "accept", {});
+    assert.deepEqual(await answer, { outcome: { outcome: "selected", optionId: "accept" } });
+  });
 });

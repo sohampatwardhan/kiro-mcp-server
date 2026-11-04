@@ -11,6 +11,7 @@ import { parseRoots, RootsError } from "./paths.js";
 
 export type PermissionPolicy = "ask" | "deny" | "allow";
 export type HeadlessTrust = "none" | "tools" | "all";
+export type ElicitationSetting = "on" | "off";
 
 export interface Config {
   /** Path or name of the `kiro-cli` binary. */
@@ -26,6 +27,10 @@ export interface Config {
   headlessTrust: HeadlessTrust;
   allowTrustWorkspace: boolean;
   allowConfigWrites: boolean;
+  /** `off` stops forwarding pending permissions as form elicitations. */
+  elicitation: ElicitationSetting;
+  /** Share of credits used (1 to 100) at which new work fails with USAGE_LIMIT_NEAR; null when unset. */
+  usageStopPercent: number | null;
   cliTimeoutMs: number;
   requestTimeoutMs: number;
   headlessTimeoutMs: number;
@@ -58,6 +63,9 @@ export const LIMITS = {
   resourceCoalesceMs: 250,
   maxClosedSessions: 50,
   cliOutputBytes: 4 * 1024 * 1024,
+  usageCacheMs: 60_000,
+  usageGuardTimeoutMs: 10_000,
+  usageGuardFailureMs: 30_000,
 } as const;
 
 export class ConfigError extends Error {
@@ -85,6 +93,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     headlessTrust: parseEnum("KIRO_MCP_HEADLESS_TRUST", env.KIRO_MCP_HEADLESS_TRUST, ["none", "tools", "all"], "none"),
     allowTrustWorkspace: parseBooleanFlag("KIRO_MCP_ALLOW_TRUST_WORKSPACE", env.KIRO_MCP_ALLOW_TRUST_WORKSPACE),
     allowConfigWrites: parseBooleanFlag("KIRO_MCP_ALLOW_CONFIG_WRITES", env.KIRO_MCP_ALLOW_CONFIG_WRITES),
+    elicitation: parseEnum("KIRO_MCP_ELICITATION", env.KIRO_MCP_ELICITATION, ["on", "off"], "on"),
+    usageStopPercent: parsePercent("KIRO_MCP_USAGE_STOP_PERCENT", env.KIRO_MCP_USAGE_STOP_PERCENT),
     cliTimeoutMs: parseMilliseconds("KIRO_MCP_CLI_TIMEOUT_MS", env.KIRO_MCP_CLI_TIMEOUT_MS) ?? 120_000,
     requestTimeoutMs: parseMilliseconds("KIRO_MCP_REQUEST_TIMEOUT_MS", env.KIRO_MCP_REQUEST_TIMEOUT_MS) ?? 120_000,
     headlessTimeoutMs: parseMilliseconds("KIRO_MCP_HEADLESS_TIMEOUT_MS", env.KIRO_MCP_HEADLESS_TIMEOUT_MS) ?? 3_600_000,
@@ -121,6 +131,14 @@ function parseMilliseconds(name: string, raw: string | undefined): number | null
   if (!/^[1-9][0-9]*$/.test(value) || !Number.isSafeInteger(Number(value))) {
     throw new ConfigError(`${name} must be a positive integer (milliseconds), got ${JSON.stringify(raw)}`);
   }
+  return Number(value);
+}
+
+/** Unset or blank is null. A set value must be an integer from 1 to 100. */
+function parsePercent(name: string, raw: string | undefined): number | null {
+  const value = (raw ?? "").trim();
+  if (value === "") return null;
+  if (!/^[1-9][0-9]{0,2}$/.test(value) || Number(value) > 100) throw new ConfigError(`${name} must be an integer from 1 to 100, got ${JSON.stringify(raw)}`);
   return Number(value);
 }
 

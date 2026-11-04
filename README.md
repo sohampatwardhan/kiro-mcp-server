@@ -94,9 +94,11 @@ All are optional. An invalid value makes the server print the variable name and 
 | `KIRO_MCP_PERMISSION_TIMEOUT_MS` | `600000` | Unanswered permissions are rejected after this long |
 | `KIRO_MCP_ALLOW_SHELL` | off | Lets shell-command requests be approved. Off: they are rejected at once |
 | `KIRO_MCP_ALLOW_PERSISTENT_CONSENT` | off | Allows `allow_always` answers |
+| `KIRO_MCP_ELICITATION` | `on` | `on` also shows pending permissions to the client's user as MCP forms; `off` never sends forms, so every request waits for `kiro_permission_respond` |
 | `KIRO_MCP_HEADLESS_TRUST` | `none` | `tools` allows headless `trust_tools`; `all` also allows `trust_all_tools` |
 | `KIRO_MCP_ALLOW_TRUST_WORKSPACE` | off | Allows headless `trust_workspace` |
 | `KIRO_MCP_ALLOW_CONFIG_WRITES` | off | Allows agent, MCP config, settings, and powers writes |
+| `KIRO_MCP_USAGE_STOP_PERCENT` | unset (no check) | An integer from 1 to 100. New work fails with `USAGE_LIMIT_NEAR` once this share of credits is used (see [Credit budget](#credit-budget)) |
 | `KIRO_MCP_CLI_TIMEOUT_MS` | `120000` | Subcommand timeout |
 | `KIRO_MCP_REQUEST_TIMEOUT_MS` | `120000` | ACP request timeout (prompts have none) |
 | `KIRO_MCP_HEADLESS_TIMEOUT_MS` | `3600000` | Headless job timeout; `timeout_s` may lower it |
@@ -111,12 +113,38 @@ ACP has no method for trusting a workspace. Until a folder is trusted, Kiro does
 
 Shell approvals are off by default, as in `claude-code-mcp-server`: Kiro's requests to run commands (including tests and builds) are rejected at once and recorded as `policy: "shell_disabled"`. To let the calling agent approve them one at a time, set `KIRO_MCP_ALLOW_SHELL=1`. To approve every non-shell request automatically as well, add `KIRO_MCP_PERMISSIONS=allow`.
 
+### Requests the server rejects on its own
+
+A turn result (`kiro_prompt`, and `turn` in `kiro_events`) lists every request the server rejected without the calling agent choosing it under `turn.auto_rejected`, each with `permission_id`, `tool_call_id`, `title`, `policy`, and a `hint` naming what would change it:
+
+| `policy` | Cause | Hint |
+| --- | --- | --- |
+| `shell_disabled` | Shell approvals are off | Set `KIRO_MCP_ALLOW_SHELL=1` |
+| `deny` | `KIRO_MCP_PERMISSIONS=deny` | Set it to `ask` |
+| `timeout` | Nobody answered within `KIRO_MCP_PERMISSION_TIMEOUT_MS` | Answer with `kiro_permission_respond` while the turn runs |
+| `elicitation` | The client's user, or the client itself, rejected the approval form | If no person saw it, set `KIRO_MCP_ELICITATION=off` |
+
+### Approval forms (elicitation)
+
+When the MCP client declares form elicitation, a request waiting under `ask` is also shown to the client's user as a form listing the options the server would accept. Choosing one answers the request, declining the form rejects it, and dismissing it leaves it pending. Some clients declare form elicitation but decline every form without showing it to anyone, so every request is rejected within milliseconds, before the calling agent can answer (`policy: "elicitation"`). For those clients set `KIRO_MCP_ELICITATION=off`: no forms are sent, and requests wait for `kiro_permission_respond` as usual. `kiro_status` reports the setting as `policy.elicitation` and whether the client declared forms as `policy.client_form_elicitation`.
+
+### Credit budget
+
+`kiro_usage` reads the plan's usage with `_kiro/account/getUsage`, the method behind `/usage`. It never starts a model turn or spends credits. Besides the plan, reset date, breakdowns, and bonus and add-on grants, it returns:
+
+- `remaining_total`: credits left across plan credits, bonus credits, and add-on credits;
+- `percent_used`: credits used over the credit limit across the same pools, from 0 to 100;
+- `checked_at` and `cached`: a reading is reused for 60 s, and concurrent calls share one request. Pass `refresh: true` for a new reading;
+- `stop_percent` and `blocked_by`: the operator's threshold, and the reason new work would be refused (`null` when nothing blocks).
+
+With `KIRO_MCP_USAGE_STOP_PERCENT` set, `kiro_prompt`, `kiro_tangent` `merge`, `kiro_workflow` `invoke`, and `kiro_run_headless` check usage first. At or above the threshold they fail with `USAGE_LIMIT_NEAR`, naming the percent used, the credits left, and the reset date, and nothing is sent to Kiro. `kiro_steer`, `kiro_cancel`, and `kiro_session_compact` are not checked. A prompt sent with `when_busy: "queue"` is checked when it is queued, not when it starts. The check reads usage through the ACP host, so it starts the host if needed, even before a headless run. If usage cannot be read within 10 s, work goes ahead and the check is skipped for the next 30 s: this is a budget guard, not a security control.
+
 ## Typical flow
 
 1. `kiro_status` checks the CLI, sign-in, V3 engine, trust, and policy.
 2. `kiro_session_new` (or `kiro_session_load`) attaches a session; `kiro_session_configure` picks mode (`vibe`, `plan`, `spec`, `quick-spec`, `bug-fix`, `autonomous`, or a custom agent), model, and effort.
 3. `kiro_prompt` sends a prompt and waits up to `wait_s`. If the turn is still running, poll `kiro_events` (or `kiro_stream_session`) with the returned cursor until the status is `completed`, `cancelled`, or `failed`.
-4. Answer `pending_permissions` with `kiro_permission_respond`. When the client supports MCP elicitation, the request is also shown to its user.
+4. Answer `pending_permissions` with `kiro_permission_respond`. When the client supports MCP elicitation, the request is also shown to its user (see [Approval forms](#approval-forms-elicitation)).
 5. Steer with `kiro_steer`, stop with `kiro_cancel`, branch with `kiro_session_fork` or `kiro_tangent`, and close with `kiro_session_close`.
 
 ## Tool reference
@@ -124,7 +152,7 @@ Shell approvals are off by default, as in `claude-code-mcp-server`: Kiro's reque
 | Tool | What it does |
 | --- | --- |
 | `kiro_status` | CLI path and version, V3 engine, capabilities, sign-in (account type, email, profile), roots and trust, policy, log paths, optional diagnostics |
-| `kiro_usage` | Plan usage and credits (`_kiro/account/getUsage`), plus credits observed for a session |
+| `kiro_usage` | Plan usage and credits (`_kiro/account/getUsage`), credits left and percent used, cached 60 s (`refresh` for a new reading), plus credits observed for a session |
 | `kiro_session_new` | New local or cloud session, with mode, model, effort, title |
 | `kiro_session_list` | Saved sessions by workspace or user scope, with source, title, and limit filters |
 | `kiro_session_load` | Resume a session by id, or the latest for a workspace, with replay |
@@ -189,6 +217,7 @@ Resource: `kiro-session://<session_id>/transcript` returns a session's newest ev
 | `STDIO_SERVER_WITHHELD` | Stdio MCP servers run arbitrary commands and cannot be added |
 | `SETTING_WITHHELD` | The setting key is withheld |
 | `CONFIRMATION_REQUIRED` | The call needs `confirm: true` |
+| `USAGE_LIMIT_NEAR` | `KIRO_MCP_USAGE_STOP_PERCENT` is set and that share of credits is used. The message names the percent used, the credits left, and the reset date. Nothing was sent to Kiro |
 | `JOB_NOT_FOUND` | Unknown or expired headless job |
 | `SPEC_NOT_FOUND` | The spec or document does not exist |
 | `TANGENT_NOT_FOUND` | Not part of a tangent tree, or no tangent with that name |

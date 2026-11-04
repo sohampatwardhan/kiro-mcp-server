@@ -50,7 +50,8 @@ describe("kiro_stream_session", () => {
       ]);
       assert.equal(first.uri, `kiro-session://${STORED}/transcript`);
       const again = await c.ok<Stream>("kiro_stream_session", { session_id: STORED, wait_s: 0 });
-      assert.deepEqual(again.events, first.events, "same cursor, same events");
+      // A live update (context_usage after the load) can land between the two reads: same cursor, same events first.
+      assert.deepEqual(again.events.slice(0, first.events.length), first.events, "same cursor, same events");
 
       const started = Date.now();
       await c.ok("kiro_prompt", { session_id: STORED, text: "[long:600] live", wait_s: 0 });
