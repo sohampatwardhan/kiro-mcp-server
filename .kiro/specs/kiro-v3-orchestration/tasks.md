@@ -463,7 +463,7 @@ Three chains tie for longest: through 8, through 10, and through 18. The critica
   - Tests: `test/argv-config.test.ts` for the variable, `test/permissions.test.ts` (no elicit call with `off`, the request stays pending), and a smoke case with a client that declines every form: with `off` the request reaches `kiro_permissions` and `kiro_permission_respond` approves it
   - _Requirements: 12.11, 12.12_
 
-- [ ] 21. auto_rejected in turn results
+- [x] 21. auto_rejected in turn results
   - `src/turns.ts`: `Turn.autoRejected` and `turnView` field `auto_rejected` (`permission_id`, `tool_call_id`, `title`, `policy`, `hint`)
   - `src/server.ts` `wirePermissions`: on a reject decision with policy `shell_disabled`, `deny`, `timeout`, or `elicitation`, append to the session's active turn. Hints name `KIRO_MCP_ALLOW_SHELL=1`, `KIRO_MCP_PERMISSIONS`, `KIRO_MCP_PERMISSION_TIMEOUT_MS` and `kiro_permission_respond`, and `KIRO_MCP_ELICITATION=off`
   - `kiro_prompt` and `kiro_events` output schemas gain `auto_rejected`; README turn result docs

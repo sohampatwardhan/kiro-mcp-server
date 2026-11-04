@@ -19,13 +19,17 @@ interface PromptResult {
   turn_id: string;
   status: string;
   cursor: number;
-  turn: { final_text: string | null; tool_calls: { status: string; failure_reason: string | null }[] };
+  turn: {
+    final_text: string | null;
+    tool_calls: { status: string; failure_reason: string | null }[];
+    auto_rejected: { permission_id: string; tool_call_id: string; title: string; policy: string; hint: string }[];
+  };
   pending_permissions: Pending[];
 }
 interface EventsResult {
   status: string;
   next_cursor: number;
-  events: { type: string; policy?: string }[];
+  events: { type: string; policy?: string; toolCallId?: string }[];
   turn: PromptResult["turn"] | null;
 }
 
@@ -65,6 +69,7 @@ describe("permissions under the default ask policy", () => {
       const done = await finish(c, id);
       assert.match(done.turn?.final_text ?? "", /permission: selected:accept\]/);
       assert.equal(done.turn?.tool_calls[0]?.status, "completed");
+      assert.deepEqual(done.turn?.auto_rejected, []);
       assert.equal((await c.fail("kiro_permission_respond", { permission_id: pending.permission_id, option_id: "accept" })).code, "PERMISSION_NOT_FOUND");
       const events = await allEvents(c, id);
       assert.ok(events.some((e) => e.type === "permission_requested"));
@@ -97,6 +102,11 @@ describe("permissions under the default ask policy", () => {
       assert.match(p.turn.final_text ?? "", /permission: selected:reject\]/);
       const events = await allEvents(c, id);
       assert.ok(events.some((e) => e.type === "permission_resolved" && e.policy === "shell_disabled"));
+      const [rejected] = p.turn.auto_rejected;
+      assert.equal(p.turn.auto_rejected.length, 1);
+      assert.equal(rejected?.policy, "shell_disabled");
+      assert.equal(rejected?.tool_call_id, events.find((e) => e.type === "permission_requested")?.toolCallId);
+      assert.match(rejected?.hint ?? "", /KIRO_MCP_ALLOW_SHELL=1/);
       const permissionId = (events.find((e) => e.type === "permission_requested") as unknown as { permissionId: string }).permissionId;
       assert.equal((await c.fail("kiro_permission_respond", { permission_id: permissionId, option_id: "accept" })).code, "SHELL_APPROVAL_DISABLED");
     } finally {
@@ -126,6 +136,8 @@ describe("permissions under the default ask policy", () => {
       assert.equal(p.status, "completed");
       assert.match(p.turn.final_text ?? "", /selected:reject\]/);
       assert.ok((await allEvents(c, id)).some((e) => e.type === "permission_resolved" && e.policy === "timeout"));
+      assert.equal(p.turn.auto_rejected[0]?.policy, "timeout");
+      assert.match(p.turn.auto_rejected[0]?.hint ?? "", /kiro_permission_respond/);
     } finally {
       await c.close();
     }
@@ -193,11 +205,16 @@ describe("elicitation", () => {
     }
   });
 
-  it("decline rejects", async () => {
+  it("decline rejects and says how to stop forms", async () => {
     const { c } = await withElicit({ action: "decline" });
     try {
-      const p = await c.ok<PromptResult>("kiro_prompt", { session_id: await session(c), text: "[permission:write] edit" });
+      const id = await session(c);
+      const p = await c.ok<PromptResult>("kiro_prompt", { session_id: id, text: "[permission:write] edit" });
       assert.match(p.turn.final_text ?? "", /selected:reject\]/);
+      assert.equal(p.turn.auto_rejected[0]?.policy, "elicitation");
+      assert.match(p.turn.auto_rejected[0]?.hint ?? "", /KIRO_MCP_ELICITATION=off/);
+      const viaEvents = await c.ok<EventsResult>("kiro_events", { session_id: id, cursor: 0 });
+      assert.equal(viaEvents.turn?.auto_rejected[0]?.policy, "elicitation");
     } finally {
       await c.close();
     }

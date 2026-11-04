@@ -4,7 +4,7 @@ import type { Config } from "./config.js";
 import type { RequestPermissionParams } from "./acp/types.js";
 import { stopAll } from "./children.js";
 import { createCore, type Core } from "./core.js";
-import { PermissionBroker, permissionView, type ElicitParams, type ElicitResult } from "./permissions.js";
+import { PermissionBroker, autoRejectHint, permissionView, type ElicitParams, type ElicitResult } from "./permissions.js";
 import { registerBranchingTools } from "./tools/branching.js";
 import { registerConfigTools } from "./tools/config.js";
 import { registerConfigureTools } from "./tools/configure.js";
@@ -112,7 +112,12 @@ function wirePermissions(server: McpServer, core: Core): PermissionBroker {
     if (session === undefined) return;
     if (d.cancelled || d.policy === "cancel") session.normalizer.noteDecision(p.toolCallId, "cancelled");
     else if (d.optionKind?.startsWith("reject")) session.normalizer.noteDecision(p.toolCallId, "denied");
-    const turnId = turns.activeTurn(p.sessionId)?.turnId;
+    const turn = turns.activeTurn(p.sessionId);
+    const turnId = turn?.turnId;
+    const hint = d.optionKind?.startsWith("reject") ? autoRejectHint(d.policy) : null;
+    if (turn !== undefined && hint !== null) {
+      turn.autoRejected.push({ permission_id: p.permissionId, tool_call_id: p.toolCallId, title: p.title, policy: d.policy, hint });
+    }
     session.feed.append({
       type: "permission_resolved",
       permissionId: p.permissionId,

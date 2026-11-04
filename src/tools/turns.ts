@@ -22,6 +22,9 @@ const turnShape = z.object({
     z.object({ tool_call_id: z.string(), title: z.string(), kind: z.string().nullable(), status: z.string(), failure_reason: z.string().nullable() }),
   ),
   credits: z.array(json),
+  auto_rejected: z.array(
+    z.object({ permission_id: z.string(), tool_call_id: z.string(), title: z.string(), policy: z.string(), hint: z.string() }),
+  ),
   elapsed_ms: z.number().nullable(),
   error: z.object({ code: z.string(), message: z.string() }).nullable(),
 });

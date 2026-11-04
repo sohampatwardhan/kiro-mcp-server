@@ -283,6 +283,25 @@ export class PermissionBroker {
   }
 }
 
+/**
+ * What would change a rejection the server made without the calling agent
+ * (Requirement 12.13), or null for decisions the caller made or cancellations.
+ */
+export function autoRejectHint(policy: Policy): string | null {
+  switch (policy) {
+    case "shell_disabled":
+      return "Shell approvals are off. The operator can set KIRO_MCP_ALLOW_SHELL=1 so the calling agent can approve shell commands.";
+    case "deny":
+      return "KIRO_MCP_PERMISSIONS=deny rejects every request. The operator can set it to ask so the calling agent decides.";
+    case "timeout":
+      return "Nobody answered within KIRO_MCP_PERMISSION_TIMEOUT_MS. Answer pending_permissions with kiro_permission_respond while the turn runs.";
+    case "elicitation":
+      return "The MCP client answered the approval form with a rejection. If no person saw the form, the operator can set KIRO_MCP_ELICITATION=off so requests wait for kiro_permission_respond.";
+    default:
+      return null;
+  }
+}
+
 /** A pending permission as tool output. */
 export function permissionView(p: PendingPermission) {
   return {

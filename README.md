@@ -113,6 +113,17 @@ ACP has no method for trusting a workspace. Until a folder is trusted, Kiro does
 
 Shell approvals are off by default, as in `claude-code-mcp-server`: Kiro's requests to run commands (including tests and builds) are rejected at once and recorded as `policy: "shell_disabled"`. To let the calling agent approve them one at a time, set `KIRO_MCP_ALLOW_SHELL=1`. To approve every non-shell request automatically as well, add `KIRO_MCP_PERMISSIONS=allow`.
 
+### Requests the server rejects on its own
+
+A turn result (`kiro_prompt`, and `turn` in `kiro_events`) lists every request the server rejected without the calling agent choosing it under `turn.auto_rejected`, each with `permission_id`, `tool_call_id`, `title`, `policy`, and a `hint` naming what would change it:
+
+| `policy` | Cause | Hint |
+| --- | --- | --- |
+| `shell_disabled` | Shell approvals are off | Set `KIRO_MCP_ALLOW_SHELL=1` |
+| `deny` | `KIRO_MCP_PERMISSIONS=deny` | Set it to `ask` |
+| `timeout` | Nobody answered within `KIRO_MCP_PERMISSION_TIMEOUT_MS` | Answer with `kiro_permission_respond` while the turn runs |
+| `elicitation` | The client's user, or the client itself, rejected the approval form | If no person saw it, set `KIRO_MCP_ELICITATION=off` |
+
 ### Approval forms (elicitation)
 
 When the MCP client declares form elicitation, a request waiting under `ask` is also shown to the client's user as a form listing the options the server would accept. Choosing one answers the request, declining the form rejects it, and dismissing it leaves it pending. Some clients declare form elicitation but decline every form without showing it to anyone, so every request is rejected within milliseconds, before the calling agent can answer (`policy: "elicitation"`). For those clients set `KIRO_MCP_ELICITATION=off`: no forms are sent, and requests wait for `kiro_permission_respond` as usual. `kiro_status` reports the setting as `policy.elicitation` and whether the client declared forms as `policy.client_form_elicitation`.
